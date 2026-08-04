@@ -7,7 +7,6 @@ import { usePOSContext } from "@/context/POSContext";
 import { createClient } from "@/lib/supabase/client";
 import { listProductsWithCategory } from "@/services/products.service";
 import { listCategories } from "@/services/categories.service";
-import { productToCartItem } from "@/types/pos";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -28,7 +27,7 @@ type Mode = "barcode" | "manual";
  * quantity instead of scanning, for items without a readable barcode.
  */
 export function BarcodeScanner() {
-  const { scanBarcode, isScanning, scanError, addItem } = usePOSContext();
+  const { scanBarcode, isScanning, scanError, addProductToCart } = usePOSContext();
   const [manualValue, setManualValue] = useState("");
   const [mode, setMode] = useState<Mode>("barcode");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -77,7 +76,7 @@ export function BarcodeScanner() {
   );
 
   function handleManualAdd(product: ProductWithCategory, quantity: number) {
-    addItem(productToCartItem(product, quantity));
+    void addProductToCart(product, quantity);
   }
 
   return (

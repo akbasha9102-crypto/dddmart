@@ -13,7 +13,7 @@ export interface CartItem {
   barcode: string;
   unitPrice: number;
   quantity: number;
-  /** Snapshot of stock on hand at the time of scan, used for over-sell warnings. */
+  /** Stock remaining on hand immediately after this item was reserved (post-decrement), for display only — not used for any further stock arithmetic. */
   availableStock: number;
 }
 

@@ -205,7 +205,12 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      adjust_product_stock: {
+        Args: { p_product_id: string; p_delta: number };
+        Returns: Database["public"]["Tables"]["products"]["Row"][];
+      };
+    };
     Enums: Record<string, never>;
   };
 }

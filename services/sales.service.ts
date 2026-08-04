@@ -7,9 +7,12 @@ import { generateInvoiceNumber } from "@/lib/utils";
 type Client = SupabaseClient<Database>;
 
 /**
- * Persists a completed cash sale: the invoice header, its line items, and the
- * resulting stock decrement. Not wrapped in a DB transaction (no RPC layer
- * yet) — acceptable for a single-till MVP, revisit before multi-till rollout.
+ * Persists a completed cash sale: the invoice header and its line items.
+ * Stock is no longer touched here — it's decremented atomically at
+ * add-to-cart time instead (see services/products.service.ts#decrementStock
+ * / hooks/usePOS.ts#addProductToCart). Not wrapped in a DB transaction (no
+ * RPC layer yet) — acceptable for a single-till MVP, revisit before
+ * multi-till rollout.
  */
 export async function createSale(supabase: Client, payload: CheckoutPayload): Promise<CompletedSale> {
   if (payload.items.length === 0) {
@@ -49,15 +52,6 @@ export async function createSale(supabase: Client, payload: CheckoutPayload): Pr
   const { data: items, error: itemsError } = await supabase.from("sale_items").insert(saleItems).select();
 
   if (itemsError) throw itemsError;
-
-  await Promise.all(
-    payload.items.map((item) =>
-      supabase
-        .from("products")
-        .update({ quantity: Math.max(item.availableStock - item.quantity, 0) })
-        .eq("id", item.productId),
-    ),
-  );
 
   return { sale, items: items ?? [], changeAmount };
 }

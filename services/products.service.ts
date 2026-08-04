@@ -82,3 +82,35 @@ export async function updateProduct(supabase: Client, id: string, patch: Product
   if (error) throw error;
   return data;
 }
+
+/**
+ * Atomically decrements stock by `quantity`, guarded so it can never go
+ * below zero. Returns the updated product, or null if there wasn't enough
+ * stock at the instant this ran (lost a race to a concurrent sale/scan, or
+ * stock changed since the cart snapshot was taken) — callers must treat
+ * null as "insufficient stock now", not throw a generic error.
+ */
+export async function decrementStock(supabase: Client, productId: string, quantity: number): Promise<Product | null> {
+  const { data, error } = await supabase.rpc("adjust_product_stock", {
+    p_product_id: productId,
+    p_delta: -quantity,
+  });
+  if (error) throw error;
+  return data?.[0] ?? null;
+}
+
+/**
+ * Atomically restores (increments) stock by `quantity` — the symmetric
+ * inverse of decrementStock, used when a cart line is removed, its quantity
+ * reduced, or the whole cart is cleared before checkout. Always succeeds
+ * (increment can't fail the >= 0 guard) unless the product row itself was
+ * deleted, in which case it resolves to null.
+ */
+export async function incrementStock(supabase: Client, productId: string, quantity: number): Promise<Product | null> {
+  const { data, error } = await supabase.rpc("adjust_product_stock", {
+    p_product_id: productId,
+    p_delta: quantity,
+  });
+  if (error) throw error;
+  return data?.[0] ?? null;
+}
