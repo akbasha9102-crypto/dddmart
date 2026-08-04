@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import type { CheckoutPayload, CompletedSale, SaleItemInsert } from "@/types/pos";
+import type { CheckoutPayload, CompletedSale, Sale, SaleItem, SaleItemInsert } from "@/types/pos";
 import { calculateTotals } from "@/types/pos";
 import { generateInvoiceNumber } from "@/lib/utils";
 
@@ -62,7 +62,7 @@ export async function createSale(supabase: Client, payload: CheckoutPayload): Pr
   return { sale, items: items ?? [], changeAmount };
 }
 
-export async function getDailySales(supabase: Client, date: Date) {
+export async function getDailySales(supabase: Client, date: Date): Promise<Sale[]> {
   const dayStart = new Date(date);
   dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(date);
@@ -77,4 +77,65 @@ export async function getDailySales(supabase: Client, date: Date) {
 
   if (error) throw error;
   return data ?? [];
+}
+
+export async function getSaleItems(supabase: Client, saleId: string): Promise<SaleItem[]> {
+  const { data, error } = await supabase.from("sale_items").select("*").eq("sale_id", saleId);
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+export interface DailySalesSummary {
+  sales: Sale[];
+  salesCount: number;
+  totalRevenue: number;
+  totalProfit: number;
+}
+
+/**
+ * Profit is estimated from each product's *current* cost_price, since
+ * sale_items doesn't snapshot cost at sale time — fine for a same-day
+ * report, but historical reports will drift if costs change later.
+ */
+export async function getDailySalesSummary(supabase: Client, date: Date): Promise<DailySalesSummary> {
+  const sales = await getDailySales(supabase, date);
+
+  if (sales.length === 0) {
+    return { sales, salesCount: 0, totalRevenue: 0, totalProfit: 0 };
+  }
+
+  const { data: items, error: itemsError } = await supabase
+    .from("sale_items")
+    .select("product_id, quantity, unit_price")
+    .in(
+      "sale_id",
+      sales.map((sale) => sale.id),
+    );
+
+  if (itemsError) throw itemsError;
+
+  const productIds = Array.from(
+    new Set((items ?? []).map((item) => item.product_id).filter((id): id is string => id !== null)),
+  );
+
+  const costByProductId = new Map<string, number>();
+  if (productIds.length > 0) {
+    const { data: products, error: productsError } = await supabase
+      .from("products")
+      .select("id, cost_price")
+      .in("id", productIds);
+
+    if (productsError) throw productsError;
+    (products ?? []).forEach((product) => costByProductId.set(product.id, product.cost_price));
+  }
+
+  const totalProfit = (items ?? []).reduce((sum, item) => {
+    const cost = item.product_id ? (costByProductId.get(item.product_id) ?? 0) : 0;
+    return sum + (item.unit_price - cost) * item.quantity;
+  }, 0);
+
+  const totalRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
+
+  return { sales, salesCount: sales.length, totalRevenue, totalProfit };
 }

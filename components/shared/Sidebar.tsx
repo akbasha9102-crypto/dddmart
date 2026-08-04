@@ -8,7 +8,6 @@ interface SidebarLink {
 
 const LINKS: SidebarLink[] = [
   { href: "/inventory", label: "المنتجات" },
-  { href: "/inventory/categories", label: "الفئات" },
   { href: "/sales", label: "تقارير المبيعات" },
 ];
 
