@@ -1,29 +1,64 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { usePOSContext } from "@/context/POSContext";
+import { createClient } from "@/lib/supabase/client";
+import { listProductsWithCategory } from "@/services/products.service";
+import { listCategories } from "@/services/categories.service";
+import { productToCartItem } from "@/types/pos";
+import type { Category, ProductWithCategory } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { CameraBarcodeScanner } from "@/components/features/pos/CameraBarcodeScanner";
+import { ManualProductPicker } from "@/components/features/pos/ManualProductPicker";
+import { cn } from "@/lib/utils";
+
+type Mode = "barcode" | "manual";
 
 /**
  * Dual-mode barcode entry: a physical HID scanner fires keystrokes globally
  * (captured by useBarcodeScanner), while this input also accepts manual
- * typing for damaged/unreadable barcodes. Autofocused and refocused after
- * every scan so the cashier never has to click back into it.
+ * typing for damaged/unreadable barcodes, or camera-based optical scanning.
+ * Autofocused and refocused after every scan so the cashier never has to
+ * click back into it.
+ *
+ * A separate "manual" mode lets the cashier pick category → product →
+ * quantity instead of scanning, for items without a readable barcode.
  */
 export function BarcodeScanner() {
-  const { scanBarcode, isScanning, scanError } = usePOSContext();
+  const { scanBarcode, isScanning, scanError, addItem } = usePOSContext();
   const [manualValue, setManualValue] = useState("");
+  const [mode, setMode] = useState<Mode>("barcode");
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [products, setProducts] = useState<ProductWithCategory[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // The HID scanner listener stays enabled regardless of mode: it only
+  // reacts to fast keystroke bursts outside of typing fields, so a stray
+  // physical scan while in manual mode is harmless (and re-enabling it
+  // automatically when switching back to barcode mode needs no extra code).
   useBarcodeScanner({
     onScan: (barcode) => {
       void scanBarcode(barcode);
       inputRef.current?.focus();
     },
   });
+
+  useEffect(() => {
+    async function loadData() {
+      const supabase = createClient();
+      const [productList, categoryList] = await Promise.all([
+        listProductsWithCategory(supabase),
+        listCategories(supabase),
+      ]);
+      setProducts(productList);
+      setCategories(categoryList);
+    }
+    void loadData();
+  }, []);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,23 +68,80 @@ export function BarcodeScanner() {
     setManualValue("");
   }
 
+  const handleDetected = useCallback(
+    (barcode: string) => {
+      setIsCameraOpen(false);
+      void scanBarcode(barcode);
+    },
+    [scanBarcode],
+  );
+
+  function handleManualAdd(product: ProductWithCategory, quantity: number) {
+    addItem(productToCartItem(product, quantity));
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2">
-      <Input
-        ref={inputRef}
-        autoFocus
-        value={manualValue}
-        onChange={(event) => setManualValue(event.target.value)}
-        placeholder="امسح الباركود أو أدخله يدوياً..."
-        className="flex-1 text-lg"
-        aria-label="باركود المنتج"
-      />
-      <Button type="submit" size="lg" disabled={isScanning}>
-        {isScanning ? "..." : "إضافة"}
-      </Button>
-      {scanError ? (
-        <div className="absolute mt-14 rounded-lg bg-red-100 px-3 py-1 text-sm text-red-700">{scanError}</div>
-      ) : null}
-    </form>
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setMode("barcode")}
+          className={cn(
+            "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
+            mode === "barcode"
+              ? "border-brand-600 bg-brand-600 text-white"
+              : "border-gray-200 bg-white text-gray-600",
+          )}
+        >
+          باركود
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("manual")}
+          className={cn(
+            "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
+            mode === "manual"
+              ? "border-brand-600 bg-brand-600 text-white"
+              : "border-gray-200 bg-white text-gray-600",
+          )}
+        >
+          يدوي
+        </button>
+      </div>
+
+      {mode === "barcode" ? (
+        <>
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <Input
+              ref={inputRef}
+              autoFocus={mode === "barcode"}
+              value={manualValue}
+              onChange={(event) => setManualValue(event.target.value)}
+              placeholder="امسح الباركود أو أدخله يدوياً..."
+              className="flex-1 text-lg"
+              aria-label="باركود المنتج"
+            />
+            <Button
+              type="button"
+              size="lg"
+              variant="secondary"
+              onClick={() => setIsCameraOpen(true)}
+              aria-label="مسح بالكاميرا"
+            >
+              📷
+            </Button>
+            <Button type="submit" size="lg" disabled={isScanning}>
+              {isScanning ? "..." : "إضافة"}
+            </Button>
+          </form>
+          {scanError ? (
+            <div className="absolute mt-14 rounded-lg bg-red-100 px-3 py-1 text-sm text-red-700">{scanError}</div>
+          ) : null}
+          <CameraBarcodeScanner open={isCameraOpen} onClose={() => setIsCameraOpen(false)} onDetected={handleDetected} />
+        </>
+      ) : (
+        <ManualProductPicker products={products} categories={categories} onAdd={handleManualAdd} />
+      )}
+    </div>
   );
 }
