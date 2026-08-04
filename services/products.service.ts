@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { isLowStock } from "@/types/product";
-import type { Product, ProductInsert, ProductUpdate } from "@/types/product";
+import type { Product, ProductInsert, ProductUpdate, ProductWithCategory } from "@/types/product";
 
 type Client = SupabaseClient<Database>;
 
@@ -33,6 +33,18 @@ export async function searchProducts(supabase: Client, query: string): Promise<P
 
 export async function listProducts(supabase: Client): Promise<Product[]> {
   const { data, error } = await supabase.from("products").select("*").order("name");
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Used to group products by category for the mobile inventory view. */
+export async function listProductsWithCategory(supabase: Client): Promise<ProductWithCategory[]> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*, category:categories(*)")
+    .eq("is_active", true)
+    .order("name");
 
   if (error) throw error;
   return data ?? [];

@@ -13,7 +13,7 @@ const LINKS: SidebarLink[] = [
 
 export function Sidebar({ activeHref }: { activeHref?: string }) {
   return (
-    <aside className="w-56 shrink-0 border-l border-gray-200 bg-white p-4">
+    <aside className="hidden w-56 shrink-0 border-l border-gray-200 bg-white p-4 md:block">
       <nav className="flex flex-col gap-1">
         {LINKS.map((link) => (
           <Link

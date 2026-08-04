@@ -4,7 +4,6 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { createProduct, updateProduct } from "@/services/products.service";
-import { createCategory } from "@/services/categories.service";
 import type { Product, Category } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -28,21 +27,6 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
   const [unit, setUnit] = useState(product?.unit ?? "قطعة");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [extraCategories, setExtraCategories] = useState<Category[]>([]);
-  const [isAddingCategory, setIsAddingCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const allCategories = [...categories, ...extraCategories];
-
-  async function handleAddCategory() {
-    const name = newCategoryName.trim();
-    if (!name) return;
-    const supabase = createClient();
-    const created = await createCategory(supabase, name);
-    setExtraCategories((prev) => [...prev, created]);
-    setCategoryId(created.id);
-    setNewCategoryName("");
-    setIsAddingCategory(false);
-  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -84,37 +68,19 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
         <label htmlFor="category" className="text-sm font-medium text-gray-700">
           الفئة
         </label>
-        <div className="flex gap-2">
-          <select
-            id="category"
-            value={categoryId ?? ""}
-            onChange={(event) => setCategoryId(event.target.value)}
-            className="h-11 flex-1 rounded-lg border border-gray-300 px-3 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
-          >
-            <option value="">بدون فئة</option>
-            {allCategories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-          <Button type="button" variant="secondary" onClick={() => setIsAddingCategory((prev) => !prev)}>
-            + فئة
-          </Button>
-        </div>
-        {isAddingCategory ? (
-          <div className="flex gap-2 pt-1">
-            <Input
-              value={newCategoryName}
-              onChange={(event) => setNewCategoryName(event.target.value)}
-              placeholder="اسم الفئة الجديدة"
-              className="flex-1"
-            />
-            <Button type="button" size="sm" onClick={() => void handleAddCategory()}>
-              إضافة
-            </Button>
-          </div>
-        ) : null}
+        <select
+          id="category"
+          value={categoryId ?? ""}
+          onChange={(event) => setCategoryId(event.target.value)}
+          className="h-11 rounded-lg border border-gray-300 px-3 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+        >
+          <option value="">بدون فئة</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

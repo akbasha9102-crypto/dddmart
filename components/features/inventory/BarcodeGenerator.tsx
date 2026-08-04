@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
 /** EAN-13-shaped random barcode with a valid check digit. */
-function generateBarcode(): string {
+export function generateBarcode(): string {
   let digits = "";
   for (let i = 0; i < 12; i++) digits += Math.floor(Math.random() * 10);
 

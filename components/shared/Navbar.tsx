@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const NAV_LINKS = [
+export const NAV_LINKS = [
   { href: "/pos", label: "الكاشير" },
   { href: "/inventory", label: "المخزون" },
   { href: "/sales", label: "المبيعات" },
@@ -12,7 +12,7 @@ export function Navbar() {
       <Link href="/" className="text-lg font-bold text-brand-700">
         DDD Mart
       </Link>
-      <nav className="flex items-center gap-6">
+      <nav className="hidden items-center gap-6 md:flex">
         {NAV_LINKS.map((link) => (
           <Link key={link.href} href={link.href} className="text-sm font-medium text-gray-600 hover:text-brand-700">
             {link.label}
