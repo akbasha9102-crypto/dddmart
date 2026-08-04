@@ -42,7 +42,7 @@ export default function POSPage() {
   const change = Math.max(paidNumber - totals.totalAmount, 0);
 
   return (
-    <div className="flex h-screen flex-col bg-gray-50">
+    <div className="-m-3 flex h-[calc(100vh-4rem-4.25rem)] flex-col overflow-hidden bg-gray-50 md:-m-6 md:h-[calc(100vh-4rem)]">
       <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
         <h1 className="text-lg font-bold text-brand-700">شاشة الكاشير</h1>
         <QuickKeys onCheckout={openCheckout} onClear={clear} />

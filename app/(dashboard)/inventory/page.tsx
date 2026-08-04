@@ -12,6 +12,7 @@ import { Modal } from "@/components/ui/Modal";
 import { StockTable } from "@/components/features/inventory/StockTable";
 import { CategoryProductList } from "@/components/features/inventory/CategoryProductList";
 import { ProductForm } from "@/components/features/inventory/ProductForm";
+import { AddCategoryForm } from "@/components/features/inventory/AddCategoryForm";
 
 export default function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -21,6 +22,8 @@ export default function InventoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isAddChoiceOpen, setIsAddChoiceOpen] = useState(false);
+  const [isCategoryFormOpen, setIsCategoryFormOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -57,6 +60,11 @@ export default function InventoryPage() {
     void loadData();
   }
 
+  function handleCategorySaved() {
+    setIsCategoryFormOpen(false);
+    void loadData();
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -70,9 +78,7 @@ export default function InventoryPage() {
           <Button variant="secondary" className="hidden md:inline-flex" onClick={openCreateForm}>
             إضافة تفصيلية
           </Button>
-          <Link href="/inventory/add">
-            <Button>+ منتج جديد</Button>
-          </Link>
+          <Button onClick={() => setIsAddChoiceOpen(true)}>+ إضافة</Button>
         </div>
       </div>
 
@@ -100,6 +106,31 @@ export default function InventoryPage() {
           onSaved={handleSaved}
           onCancel={() => setIsFormOpen(false)}
         />
+      </Modal>
+
+      <Modal open={isAddChoiceOpen} onClose={() => setIsAddChoiceOpen(false)} title="ماذا تريد أن تضيف؟">
+        <div className="flex flex-col gap-3">
+          <Link href="/inventory/add" onClick={() => setIsAddChoiceOpen(false)}>
+            <Button size="lg" className="w-full">
+              ➕ عنصر جديد
+            </Button>
+          </Link>
+          <Button
+            size="lg"
+            variant="secondary"
+            className="w-full"
+            onClick={() => {
+              setIsAddChoiceOpen(false);
+              setIsCategoryFormOpen(true);
+            }}
+          >
+            ➕ قسم جديد
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={isCategoryFormOpen} onClose={() => setIsCategoryFormOpen(false)} title="قسم جديد">
+        <AddCategoryForm onSaved={handleCategorySaved} onCancel={() => setIsCategoryFormOpen(false)} />
       </Modal>
     </div>
   );
