@@ -72,6 +72,10 @@ export async function createProduct(supabase: Client, product: ProductInsert): P
   return data;
 }
 
+export function isUniqueViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505";
+}
+
 export async function updateProduct(supabase: Client, id: string, patch: ProductUpdate): Promise<Product> {
   const { data, error } = await supabase.from("products").update(patch).eq("id", id).select().single();
 

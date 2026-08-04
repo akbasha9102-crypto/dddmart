@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
@@ -19,9 +20,18 @@ export function generateBarcode(): string {
 interface BarcodeGeneratorProps {
   value: string;
   onChange: (value: string) => void;
+  required?: boolean;
+  className?: string;
+  extraAction?: ReactNode;
 }
 
-export function BarcodeGenerator({ value, onChange }: BarcodeGeneratorProps) {
+export function BarcodeGenerator({
+  value,
+  onChange,
+  required = true,
+  className,
+  extraAction,
+}: BarcodeGeneratorProps) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-end gap-2">
@@ -29,12 +39,13 @@ export function BarcodeGenerator({ value, onChange }: BarcodeGeneratorProps) {
           label="الباركود"
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="flex-1 font-mono"
-          required
+          className={className ?? "flex-1 font-mono"}
+          required={required}
         />
         <Button type="button" variant="secondary" onClick={() => onChange(generateBarcode())}>
           توليد
         </Button>
+        {extraAction}
       </div>
       {value ? (
         <div className="flex items-end gap-[2px] rounded bg-white p-2">

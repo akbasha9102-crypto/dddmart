@@ -4,20 +4,23 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createProduct } from "@/services/products.service";
+import { createProduct, isUniqueViolation } from "@/services/products.service";
 import type { Category } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { generateBarcode } from "./BarcodeGenerator";
+import { BarcodeGenerator, generateBarcode } from "./BarcodeGenerator";
+import { CameraBarcodeScanner } from "@/components/features/shared/CameraBarcodeScanner";
 
 interface QuickAddProductFormProps {
   categories: Category[];
 }
 
-/** Mobile-first minimal add-product form: name + quantity + category only. */
+/** Mobile-first minimal add-product form: name + barcode + quantity + category only. */
 export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [quantity, setQuantity] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -35,13 +38,17 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
         quantity: Number(quantity) || 0,
         category_id: categoryId || null,
         sale_price: 0,
-        barcode: generateBarcode(),
+        barcode: barcode.trim() || generateBarcode(),
       });
 
       router.push("/inventory");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر حفظ المنتج");
+      if (isUniqueViolation(err)) {
+        setError("هذا الباركود مستخدم من قبل لمنتج آخر. جرّب مسحه مرة أخرى أو اتركه فارغاً للتوليد التلقائي.");
+      } else {
+        setError(err instanceof Error ? err.message : "تعذر حفظ المنتج");
+      }
       setIsSaving(false);
     }
   }
@@ -55,6 +62,32 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
         className="h-14 text-lg"
         required
         autoFocus
+      />
+
+      <BarcodeGenerator
+        value={barcode}
+        onChange={setBarcode}
+        required={false}
+        className="flex-1 font-mono h-14 text-lg"
+        extraAction={
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setIsCameraOpen(true)}
+            aria-label="مسح الباركود بالكاميرا"
+          >
+            📷
+          </Button>
+        }
+      />
+      <p className="text-xs text-gray-500">اتركه فارغاً لتوليد باركود تلقائياً</p>
+      <CameraBarcodeScanner
+        open={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onDetected={(code) => {
+          setBarcode(code);
+          setIsCameraOpen(false);
+        }}
       />
 
       <Input

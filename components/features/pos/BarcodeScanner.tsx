@@ -11,7 +11,7 @@ import { productToCartItem } from "@/types/pos";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { CameraBarcodeScanner } from "@/components/features/pos/CameraBarcodeScanner";
+import { CameraBarcodeScanner } from "@/components/features/shared/CameraBarcodeScanner";
 import { ManualProductPicker } from "@/components/features/pos/ManualProductPicker";
 import { cn } from "@/lib/utils";
 
