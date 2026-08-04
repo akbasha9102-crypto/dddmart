@@ -3,18 +3,29 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { createCategory } from "@/services/categories.service";
+import { createCategory, updateCategory } from "@/services/categories.service";
+import { useAuth } from "@/context/AuthContext";
 import type { Category } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { ColorSwatchPicker } from "./ColorSwatchPicker";
+import { IconPicker } from "./IconPicker";
 
-interface AddCategoryFormProps {
+interface CategoryFormProps {
+  category?: Category | null;
   onSaved: (category: Category) => void;
   onCancel: () => void;
 }
 
-export function AddCategoryForm({ onSaved, onCancel }: AddCategoryFormProps) {
-  const [name, setName] = useState("");
+const DEFAULT_COLOR = "#129055";
+const DEFAULT_ICON = "shopping-basket";
+
+/** Create/edit form for a category (name, color, icon) — reuses ProductForm's create-or-edit pattern. */
+export function CategoryForm({ category, onSaved, onCancel }: CategoryFormProps) {
+  const { user } = useAuth();
+  const [name, setName] = useState(category?.name ?? "");
+  const [color, setColor] = useState(category?.color ?? DEFAULT_COLOR);
+  const [icon, setIcon] = useState(category?.icon ?? DEFAULT_ICON);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,8 +36,13 @@ export function AddCategoryForm({ onSaved, onCancel }: AddCategoryFormProps) {
 
     try {
       const supabase = createClient();
-      const category = await createCategory(supabase, name);
-      onSaved(category);
+      const actorId = user?.id ?? null;
+
+      const saved = category
+        ? await updateCategory(supabase, category.id, { name: name.trim(), color, icon }, actorId)
+        : await createCategory(supabase, { name, color, icon }, actorId);
+
+      onSaved(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر حفظ القسم");
       setIsSaving(false);
@@ -43,6 +59,9 @@ export function AddCategoryForm({ onSaved, onCancel }: AddCategoryFormProps) {
         required
         autoFocus
       />
+
+      <ColorSwatchPicker value={color} onChange={setColor} />
+      <IconPicker value={icon} onChange={setIcon} />
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 

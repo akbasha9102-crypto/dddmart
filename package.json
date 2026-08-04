@@ -15,9 +15,11 @@
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
     "clsx": "^2.1.1",
+    "lucide-react": "^1.28.0",
     "next": "^15.0.3",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@types/node": "^20.16.11",

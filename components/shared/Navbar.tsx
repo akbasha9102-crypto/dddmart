@@ -4,6 +4,7 @@ export const NAV_LINKS = [
   { href: "/pos", label: "الكاشير" },
   { href: "/inventory", label: "المخزون" },
   { href: "/sales", label: "المبيعات" },
+  { href: "/archive", label: "الأرشيف" },
 ];
 
 export function Navbar() {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { createProduct, updateProduct } from "@/services/products.service";
+import { useAuth } from "@/context/AuthContext";
 import type { Product, Category } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +19,7 @@ interface ProductFormProps {
 }
 
 export function ProductForm({ product, categories, onSaved, onCancel }: ProductFormProps) {
+  const { user } = useAuth();
   const [name, setName] = useState(product?.name ?? "");
   const [barcode, setBarcode] = useState(product?.barcode ?? "");
   const [categoryId, setCategoryId] = useState(product?.category_id ?? "");
@@ -53,9 +55,10 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
         unit,
       };
 
+      const actorId = user?.id ?? null;
       const saved = product
-        ? await updateProduct(supabase, product.id, payload)
-        : await createProduct(supabase, payload);
+        ? await updateProduct(supabase, product.id, payload, actorId)
+        : await createProduct(supabase, payload, actorId);
 
       onSaved(saved);
     } catch (err) {

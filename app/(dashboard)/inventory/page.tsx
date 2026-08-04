@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { listProducts, listProductsWithCategory, getLowStockProducts } from "@/services/products.service";
+import { listProducts, listProductsWithCategory, getLowStockProducts, deleteProduct } from "@/services/products.service";
 import { listCategories } from "@/services/categories.service";
+import { useAuth } from "@/context/AuthContext";
 import type { Product, ProductWithCategory, Category } from "@/types/product";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -12,31 +13,37 @@ import { Modal } from "@/components/ui/Modal";
 import { StockTable } from "@/components/features/inventory/StockTable";
 import { CategoryProductList } from "@/components/features/inventory/CategoryProductList";
 import { ProductForm } from "@/components/features/inventory/ProductForm";
-import { AddCategoryForm } from "@/components/features/inventory/AddCategoryForm";
+import { CategoryForm } from "@/components/features/inventory/CategoryForm";
+import { CategoryManageSheet } from "@/components/features/inventory/CategoryManageSheet";
 
 export default function InventoryPage() {
+  const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [productsWithCategory, setProductsWithCategory] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isAddChoiceOpen, setIsAddChoiceOpen] = useState(false);
   const [isCategoryFormOpen, setIsCategoryFormOpen] = useState(false);
+  const [isCategoryManageOpen, setIsCategoryManageOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     const supabase = createClient();
-    const [productList, groupedProducts, categoryList, lowStock] = await Promise.all([
+    const [productList, groupedProducts, categoryList, allCategoryList, lowStock] = await Promise.all([
       listProducts(supabase),
       listProductsWithCategory(supabase),
       listCategories(supabase),
+      listCategories(supabase, { includeInactive: true }),
       getLowStockProducts(supabase),
     ]);
     setProducts(productList);
     setProductsWithCategory(groupedProducts);
     setCategories(categoryList);
+    setAllCategories(allCategoryList);
     setLowStockCount(lowStock.length);
     setIsLoading(false);
   }, []);
@@ -50,9 +57,15 @@ export default function InventoryPage() {
     setIsFormOpen(true);
   }
 
-  function openEditForm(product: Product) {
+  function openEditForm(product: Product | ProductWithCategory) {
     setEditingProduct(product);
     setIsFormOpen(true);
+  }
+
+  async function handleDeleteProduct(product: Product | ProductWithCategory) {
+    const supabase = createClient();
+    await deleteProduct(supabase, product.id, user?.id ?? null);
+    void loadData();
   }
 
   function handleSaved() {
@@ -87,10 +100,15 @@ export default function InventoryPage() {
       ) : (
         <>
           <div className="md:hidden">
-            <CategoryProductList products={productsWithCategory} categories={categories} />
+            <CategoryProductList
+              products={productsWithCategory}
+              categories={categories}
+              onEdit={openEditForm}
+              onDelete={handleDeleteProduct}
+            />
           </div>
           <Card className="hidden overflow-hidden p-0 md:block">
-            <StockTable products={products} onEdit={openEditForm} />
+            <StockTable products={products} onEdit={openEditForm} onDelete={handleDeleteProduct} />
           </Card>
         </>
       )}
@@ -126,12 +144,31 @@ export default function InventoryPage() {
           >
             ➕ قسم جديد
           </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            className="w-full"
+            onClick={() => {
+              setIsAddChoiceOpen(false);
+              setIsCategoryManageOpen(true);
+            }}
+          >
+            ⚙️ إدارة الأقسام
+          </Button>
         </div>
       </Modal>
 
       <Modal open={isCategoryFormOpen} onClose={() => setIsCategoryFormOpen(false)} title="قسم جديد">
-        <AddCategoryForm onSaved={handleCategorySaved} onCancel={() => setIsCategoryFormOpen(false)} />
+        <CategoryForm category={null} onSaved={handleCategorySaved} onCancel={() => setIsCategoryFormOpen(false)} />
       </Modal>
+
+      {isCategoryManageOpen ? (
+        <CategoryManageSheet
+          categories={allCategories}
+          onChanged={() => void loadData()}
+          onClose={() => setIsCategoryManageOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -10,6 +10,7 @@ const LINKS: SidebarLink[] = [
   { href: "/pos", label: "الكاشير" },
   { href: "/inventory", label: "المنتجات" },
   { href: "/sales", label: "تقارير المبيعات" },
+  { href: "/archive", label: "الأرشيف" },
 ];
 
 export function Sidebar({ activeHref }: { activeHref?: string }) {

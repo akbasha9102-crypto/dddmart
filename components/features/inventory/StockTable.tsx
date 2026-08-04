@@ -1,14 +1,21 @@
+"use client";
+
+import { useState } from "react";
 import type { Product } from "@/types/product";
 import { isLowStock } from "@/types/product";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { ConfirmInline } from "@/components/ui/ConfirmInline";
 
 interface StockTableProps {
   products: Product[];
   onEdit: (product: Product) => void;
+  onDelete: (product: Product) => void;
 }
 
-export function StockTable({ products, onEdit }: StockTableProps) {
+export function StockTable({ products, onEdit, onDelete }: StockTableProps) {
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
   if (products.length === 0) {
     return <p className="p-6 text-center text-gray-400">لا توجد منتجات بعد — أضف أول منتج</p>;
   }
@@ -35,9 +42,30 @@ export function StockTable({ products, onEdit }: StockTableProps) {
               {isLowStock(product) ? " ⚠" : ""}
             </td>
             <td className="p-3">
-              <button type="button" onClick={() => onEdit(product)} className="text-brand-700 hover:underline">
-                تعديل
-              </button>
+              {confirmingId === product.id ? (
+                <ConfirmInline
+                  message="تأكيد الحذف؟"
+                  confirmLabel="حذف"
+                  onConfirm={() => {
+                    setConfirmingId(null);
+                    onDelete(product);
+                  }}
+                  onCancel={() => setConfirmingId(null)}
+                />
+              ) : (
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => onEdit(product)} className="text-brand-700 hover:underline">
+                    تعديل
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingId(product.id)}
+                    className="text-red-600 hover:underline"
+                  >
+                    حذف
+                  </button>
+                </div>
+              )}
             </td>
           </tr>
         ))}

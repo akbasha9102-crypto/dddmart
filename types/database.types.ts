@@ -6,6 +6,16 @@
 
 export type PaymentMethod = "cash";
 export type UserRole = "admin" | "cashier";
+export type OperationActionType =
+  | "sale_created"
+  | "product_created"
+  | "product_updated"
+  | "product_deleted"
+  | "category_created"
+  | "category_updated"
+  | "category_deleted"
+  | "stock_adjusted";
+export type OperationEntityType = "product" | "category" | "sale" | "stock";
 
 export interface Database {
   public: {
@@ -39,18 +49,27 @@ export interface Database {
           id: string;
           name: string;
           sort_order: number;
+          is_active: boolean;
+          color: string;
+          icon: string;
           created_at: string;
         };
         Insert: {
           id?: string;
           name: string;
           sort_order?: number;
+          is_active?: boolean;
+          color?: string;
+          icon?: string;
           created_at?: string;
         };
         Update: {
           id?: string;
           name?: string;
           sort_order?: number;
+          is_active?: boolean;
+          color?: string;
+          icon?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -199,6 +218,47 @@ export interface Database {
             columns: ["product_id"];
             isOneToOne: false;
             referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      operations_log: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          action_type: OperationActionType;
+          entity_type: OperationEntityType;
+          entity_id: string | null;
+          description: string;
+          metadata: Record<string, unknown>;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          action_type: OperationActionType;
+          entity_type: OperationEntityType;
+          entity_id?: string | null;
+          description: string;
+          metadata?: Record<string, unknown>;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          action_type?: OperationActionType;
+          entity_type?: OperationEntityType;
+          entity_id?: string | null;
+          description?: string;
+          metadata?: Record<string, unknown>;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "operations_log_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];

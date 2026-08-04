@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { createProduct, isUniqueViolation } from "@/services/products.service";
+import { useAuth } from "@/context/AuthContext";
 import type { Category } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -19,6 +20,7 @@ interface QuickAddProductFormProps {
 /** Mobile-first minimal add-product form: name + barcode + quantity + category only. */
 export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const [name, setName] = useState("");
   const [barcode, setBarcode] = useState("");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -42,14 +44,18 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
 
     try {
       const supabase = createClient();
-      await createProduct(supabase, {
-        name,
-        quantity: Number(quantity) || 0,
-        category_id: categoryId || null,
-        cost_price: Number(costPrice) || 0,
-        sale_price: Number(salePrice) || 0,
-        barcode: barcode.trim() || generateBarcode(),
-      });
+      await createProduct(
+        supabase,
+        {
+          name,
+          quantity: Number(quantity) || 0,
+          category_id: categoryId || null,
+          cost_price: Number(costPrice) || 0,
+          sale_price: Number(salePrice) || 0,
+          barcode: barcode.trim() || generateBarcode(),
+        },
+        user?.id ?? null,
+      );
 
       router.push("/inventory");
       router.refresh();

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { isLowStock } from "@/types/product";
 import type { Product, ProductInsert, ProductUpdate, ProductWithCategory } from "@/types/product";
+import { logOperation } from "@/services/archive.service";
 
 type Client = SupabaseClient<Database>;
 
@@ -32,7 +33,7 @@ export async function searchProducts(supabase: Client, query: string): Promise<P
 }
 
 export async function listProducts(supabase: Client): Promise<Product[]> {
-  const { data, error } = await supabase.from("products").select("*").order("name");
+  const { data, error } = await supabase.from("products").select("*").eq("is_active", true).order("name");
 
   if (error) throw error;
   return data ?? [];
@@ -65,10 +66,19 @@ export async function getLowStockProducts(supabase: Client): Promise<Product[]> 
   return (data ?? []).filter(isLowStock);
 }
 
-export async function createProduct(supabase: Client, product: ProductInsert): Promise<Product> {
+export async function createProduct(supabase: Client, product: ProductInsert, actorId: string | null): Promise<Product> {
   const { data, error } = await supabase.from("products").insert(product).select().single();
 
   if (error) throw error;
+
+  await logOperation(supabase, {
+    userId: actorId,
+    actionType: "product_created",
+    entityType: "product",
+    entityId: data.id,
+    description: `تم إضافة المنتج "${data.name}"`,
+  });
+
   return data;
 }
 
@@ -76,11 +86,40 @@ export function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505";
 }
 
-export async function updateProduct(supabase: Client, id: string, patch: ProductUpdate): Promise<Product> {
+export async function updateProduct(
+  supabase: Client,
+  id: string,
+  patch: ProductUpdate,
+  actorId: string | null,
+): Promise<Product> {
   const { data, error } = await supabase.from("products").update(patch).eq("id", id).select().single();
 
   if (error) throw error;
+
+  await logOperation(supabase, {
+    userId: actorId,
+    actionType: "product_updated",
+    entityType: "product",
+    entityId: data.id,
+    description: `تم تعديل المنتج "${data.name}"`,
+  });
+
   return data;
+}
+
+/** Soft delete: sets is_active = false so the product disappears from active listings while preserving history/FKs. */
+export async function deleteProduct(supabase: Client, id: string, actorId: string | null): Promise<void> {
+  const { data, error } = await supabase.from("products").update({ is_active: false }).eq("id", id).select().single();
+
+  if (error) throw error;
+
+  await logOperation(supabase, {
+    userId: actorId,
+    actionType: "product_deleted",
+    entityType: "product",
+    entityId: data.id,
+    description: `تم حذف المنتج "${data.name}"`,
+  });
 }
 
 /**
