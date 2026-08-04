@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: "Tajawal", system-ui, sans-serif;
+}
+
+html {
+  direction: rtl;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900 antialiased;
+}
+
+/* Thermal receipt printing: hide the app chrome and print only #receipt. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #receipt,
+  #receipt * {
+    visibility: visible;
+  }
+
+  #receipt {
+    position: absolute;
+    inset: 0;
+    width: 80mm;
+  }
+}
