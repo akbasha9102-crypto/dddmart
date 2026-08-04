@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { BarcodeGenerator, generateBarcode } from "./BarcodeGenerator";
 import { CameraBarcodeScanner } from "@/components/features/shared/CameraBarcodeScanner";
+import { ProfitPreview } from "./ProfitPreview";
 
 interface QuickAddProductFormProps {
   categories: Category[];
@@ -21,6 +22,8 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
   const [name, setName] = useState("");
   const [barcode, setBarcode] = useState("");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [costPrice, setCostPrice] = useState("");
+  const [salePrice, setSalePrice] = useState("");
   const [quantity, setQuantity] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -28,6 +31,12 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (Number(salePrice) <= 0) {
+      setError("سعر البيع يجب أن يكون أكبر من صفر");
+      return;
+    }
+
     setError(null);
     setIsSaving(true);
 
@@ -37,7 +46,8 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
         name,
         quantity: Number(quantity) || 0,
         category_id: categoryId || null,
-        sale_price: 0,
+        cost_price: Number(costPrice) || 0,
+        sale_price: Number(salePrice) || 0,
         barcode: barcode.trim() || generateBarcode(),
       });
 
@@ -89,6 +99,32 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
           setIsCameraOpen(false);
         }}
       />
+
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="سعر الشراء (للسلعة الواحدة)"
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step="0.01"
+          value={costPrice}
+          onChange={(event) => setCostPrice(event.target.value)}
+          className="h-14 text-lg"
+          required
+        />
+        <Input
+          label="سعر البيع (للسلعة الواحدة)"
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step="0.01"
+          value={salePrice}
+          onChange={(event) => setSalePrice(event.target.value)}
+          className="h-14 text-lg"
+          required
+        />
+      </div>
+      <ProfitPreview costPrice={costPrice} salePrice={salePrice} />
 
       <Input
         label="العدد / الكمية"

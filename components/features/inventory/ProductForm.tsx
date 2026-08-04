@@ -8,6 +8,7 @@ import type { Product, Category } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { BarcodeGenerator } from "./BarcodeGenerator";
+import { ProfitPreview } from "./ProfitPreview";
 
 interface ProductFormProps {
   product?: Product | null;
@@ -30,6 +31,12 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (Number(salePrice) <= 0) {
+      setError("سعر البيع يجب أن يكون أكبر من صفر");
+      return;
+    }
+
     setError(null);
     setIsSaving(true);
 
@@ -91,6 +98,7 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
           step="0.01"
           value={costPrice}
           onChange={(event) => setCostPrice(event.target.value)}
+          required
         />
         <Input
           label="سعر البيع"
@@ -115,6 +123,7 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
           value={minStock}
           onChange={(event) => setMinStock(event.target.value)}
         />
+        <ProfitPreview costPrice={costPrice} salePrice={salePrice} className="col-span-2" />
       </div>
 
       <Input label="الوحدة" value={unit} onChange={(event) => setUnit(event.target.value)} />
