@@ -1,5 +1,5 @@
 import type { Database } from "./database.types";
-import type { Product } from "./product";
+import type { Product, ProductUnit } from "./product";
 
 export type Sale = Database["public"]["Tables"]["sales"]["Row"];
 export type SaleInsert = Database["public"]["Tables"]["sales"]["Insert"];
@@ -15,6 +15,10 @@ export interface CartItem {
   quantity: number;
   /** Stock remaining on hand immediately after this item was reserved (post-decrement), for display only — not used for any further stock arithmetic. */
   availableStock: number;
+  /** Name of the non-base unit sold (e.g. "كارتون"). Undefined means the product's base unit. */
+  unitName?: string;
+  /** How many base units this line's unit equals. Undefined/1 both mean the base unit. */
+  unitConversionFactor?: number;
 }
 
 export interface CartTotals {
@@ -48,6 +52,19 @@ export function productToCartItem(product: Product, quantity = 1): CartItem {
     unitPrice: product.sale_price,
     quantity,
     availableStock: product.quantity,
+  };
+}
+
+export function productUnitToCartItem(product: Product, unit: ProductUnit, quantity = 1): CartItem {
+  return {
+    productId: product.id,
+    name: product.name,
+    barcode: unit.barcode,
+    unitPrice: unit.sale_price,
+    quantity,
+    availableStock: product.quantity,
+    unitName: unit.unit_name,
+    unitConversionFactor: unit.conversion_factor,
   };
 }
 
