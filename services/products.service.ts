@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { isLowStock } from "@/types/product";
-import type { Product, ProductInsert, ProductUpdate, ProductWithCategory } from "@/types/product";
+import type { Product, ProductInsert, ProductUpdate, ProductUnit, ProductUnitInsert, ProductUnitUpdate, ProductWithCategory } from "@/types/product";
 import { logOperation } from "@/services/archive.service";
 
 type Client = SupabaseClient<Database>;
@@ -17,6 +17,65 @@ export async function getProductByBarcode(supabase: Client, barcode: string): Pr
 
   if (error) throw error;
   return data;
+}
+
+/**
+ * Resolves a scanned/typed barcode to either a product sold at its base
+ * unit, or a product sold via one of its extra units (product_units).
+ * Tries the existing fast products.barcode lookup first — unchanged for
+ * every product that has no extra units — and only falls back to
+ * product_units on a miss.
+ */
+export async function resolveBarcode(
+  supabase: Client,
+  barcode: string,
+): Promise<{ kind: "base"; product: Product } | { kind: "unit"; product: Product; unit: ProductUnit } | null> {
+  const product = await getProductByBarcode(supabase, barcode);
+  if (product) return { kind: "base", product };
+
+  const { data, error } = await supabase
+    .from("product_units")
+    .select("*, products!inner(*)")
+    .eq("barcode", barcode)
+    .eq("is_active", true)
+    .eq("products.is_active", true)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const { products: productRow, ...unit } = data as ProductUnit & { products: Product };
+  return { kind: "unit", product: productRow, unit };
+}
+
+export async function listProductUnits(supabase: Client, productId: string): Promise<ProductUnit[]> {
+  const { data, error } = await supabase
+    .from("product_units")
+    .select("*")
+    .eq("product_id", productId)
+    .eq("is_active", true)
+    .order("sort_order");
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createProductUnit(supabase: Client, unit: ProductUnitInsert): Promise<ProductUnit> {
+  const { data, error } = await supabase.from("product_units").insert(unit).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateProductUnit(supabase: Client, id: string, patch: ProductUnitUpdate): Promise<ProductUnit> {
+  const { data, error } = await supabase.from("product_units").update(patch).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/** Soft delete, matching deleteProduct's convention: keeps historical sale_items snapshots intact. */
+export async function deleteProductUnit(supabase: Client, id: string): Promise<void> {
+  const { error } = await supabase.from("product_units").update({ is_active: false }).eq("id", id);
+  if (error) throw error;
 }
 
 export async function searchProducts(supabase: Client, query: string): Promise<Product[]> {
