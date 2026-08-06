@@ -7,6 +7,21 @@ import { logOperation } from "@/services/archive.service";
 
 type Client = SupabaseClient<Database>;
 
+/** Pure row-building step, split out from createSale so the quantity/price/unit-snapshot math is testable without touching Supabase. */
+export function buildSaleItemRows(saleId: string, items: CheckoutPayload["items"]): SaleItemInsert[] {
+  return items.map((item) => ({
+    sale_id: saleId,
+    product_id: item.productId,
+    product_name: item.name,
+    barcode: item.barcode,
+    quantity: item.quantity,
+    unit_price: item.unitPrice,
+    total_price: item.unitPrice * item.quantity,
+    unit_label: item.unitName ?? null,
+    unit_conversion_factor: item.unitConversionFactor ?? 1,
+  }));
+}
+
 /** Maximum free-form date range (in days) accepted by any trend/ranking query, to protect mobile clients from accidentally-huge fetches. */
 export const MAX_RANGE_DAYS = 90;
 
@@ -51,15 +66,7 @@ export async function createSale(supabase: Client, payload: CheckoutPayload): Pr
 
   if (saleError) throw saleError;
 
-  const saleItems: SaleItemInsert[] = payload.items.map((item) => ({
-    sale_id: sale.id,
-    product_id: item.productId,
-    product_name: item.name,
-    barcode: item.barcode,
-    quantity: item.quantity,
-    unit_price: item.unitPrice,
-    total_price: item.unitPrice * item.quantity,
-  }));
+  const saleItems: SaleItemInsert[] = buildSaleItemRows(sale.id, payload.items);
 
   const { data: items, error: itemsError } = await supabase.from("sale_items").insert(saleItems).select();
 
