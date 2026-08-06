@@ -2,12 +2,14 @@
 
 import { useCallback, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { decrementStock, getProductByBarcode, incrementStock } from "@/services/products.service";
+import { decrementStock, incrementStock, resolveBarcode } from "@/services/products.service";
 import { createSale } from "@/services/sales.service";
 import { useCart } from "@/hooks/useCart";
-import { findCartItemByBarcode, productToCartItem } from "@/types/pos";
+import { findCartItemByBarcode, productToCartItem, productUnitToCartItem } from "@/types/pos";
 import type { CompletedSale } from "@/types/pos";
 import type { Product } from "@/types/product";
+import type { ProductUnit } from "@/types/product";
+import { toBaseUnits } from "@/lib/units";
 
 interface UsePOSOptions {
   cashierId: string | null;
@@ -21,15 +23,16 @@ export function usePOS({ cashierId }: UsePOSOptions) {
   const [lastReceipt, setLastReceipt] = useState<CompletedSale | null>(null);
 
   const addProductToCart = useCallback(
-    async (product: Product, quantity: number) => {
+    async (product: Product, quantity: number, unit?: ProductUnit) => {
       setScanError(null);
       const supabase = createClient();
-      const updated = await decrementStock(supabase, product.id, quantity);
+      const baseUnits = toBaseUnits(quantity, unit?.conversion_factor);
+      const updated = await decrementStock(supabase, product.id, baseUnits);
       if (!updated) {
         setScanError(`الكمية المتوفرة من ${product.name} غير كافية`);
         return;
       }
-      cart.addItem(productToCartItem(updated, quantity));
+      cart.addItem(unit ? productUnitToCartItem(updated, unit, quantity) : productToCartItem(updated, quantity));
     },
     [cart],
   );
@@ -40,19 +43,23 @@ export function usePOS({ cashierId }: UsePOSOptions) {
       setIsScanning(true);
       try {
         const supabase = createClient();
-        const product = await getProductByBarcode(supabase, barcode);
+        const resolved = await resolveBarcode(supabase, barcode);
 
-        if (!product) {
+        if (!resolved) {
           setScanError(`لم يتم العثور على منتج بالباركود: ${barcode}`);
           return;
         }
 
-        if (product.quantity <= 0) {
+        const { product } = resolved;
+        const unit = resolved.kind === "unit" ? resolved.unit : undefined;
+        const requiredBaseUnits = toBaseUnits(1, unit?.conversion_factor);
+
+        if (product.quantity < requiredBaseUnits) {
           setScanError(`${product.name} غير متوفر في المخزون`);
           return;
         }
 
-        await addProductToCart(product, 1);
+        await addProductToCart(product, 1, unit);
       } catch (error) {
         setScanError(error instanceof Error ? error.message : "حدث خطأ أثناء قراءة الباركود");
       } finally {
@@ -67,11 +74,12 @@ export function usePOS({ cashierId }: UsePOSOptions) {
       const item = findCartItemByBarcode(cart.items, barcode);
       if (!item) return;
       const delta = quantity - item.quantity;
+      const baseDelta = toBaseUnits(delta, item.unitConversionFactor);
       const supabase = createClient();
-      if (delta < 0) {
-        await incrementStock(supabase, item.productId, -delta);
-      } else if (delta > 0) {
-        const updated = await decrementStock(supabase, item.productId, delta);
+      if (baseDelta < 0) {
+        await incrementStock(supabase, item.productId, -baseDelta);
+      } else if (baseDelta > 0) {
+        const updated = await decrementStock(supabase, item.productId, baseDelta);
         if (!updated) {
           setScanError(`الكمية المتوفرة من ${item.name} غير كافية`);
           return;
@@ -87,7 +95,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
       const item = findCartItemByBarcode(cart.items, barcode);
       if (!item) return;
       const supabase = createClient();
-      await incrementStock(supabase, item.productId, item.quantity);
+      await incrementStock(supabase, item.productId, toBaseUnits(item.quantity, item.unitConversionFactor));
       cart.removeItem(barcode);
     },
     [cart],
@@ -95,7 +103,9 @@ export function usePOS({ cashierId }: UsePOSOptions) {
 
   const clear = useCallback(async () => {
     const supabase = createClient();
-    await Promise.all(cart.items.map((item) => incrementStock(supabase, item.productId, item.quantity)));
+    await Promise.all(
+      cart.items.map((item) => incrementStock(supabase, item.productId, toBaseUnits(item.quantity, item.unitConversionFactor))),
+    );
     cart.clear();
   }, [cart]);
 
