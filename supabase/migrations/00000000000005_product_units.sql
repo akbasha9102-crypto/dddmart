@@ -21,6 +21,7 @@ create table if not exists product_units (
 create index if not exists product_units_product_id_idx on product_units (product_id);
 
 alter table product_units enable row level security;
+drop policy if exists "authenticated all product_units" on product_units;
 create policy "authenticated all product_units" on product_units for all to authenticated using (true) with check (true);
 
 -- Cross-table barcode uniqueness: a UNIQUE constraint can't span two
