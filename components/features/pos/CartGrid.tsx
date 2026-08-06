@@ -29,7 +29,10 @@ export function CartGrid() {
         <tbody>
           {items.map((item) => (
             <tr key={item.barcode} className="border-b border-gray-100">
-              <td className="p-2 font-medium text-gray-900">{item.name}</td>
+              <td className="p-2 font-medium text-gray-900">
+                {item.name}
+                {item.unitName ? <span className="mr-1 text-xs font-normal text-gray-500">({item.unitName})</span> : null}
+              </td>
               <td className="p-2 text-gray-600">{formatCurrency(item.unitPrice)}</td>
               <td className="p-2">
                 <div className="flex items-center gap-2">

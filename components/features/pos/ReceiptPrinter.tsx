@@ -26,7 +26,10 @@ export function ReceiptPrinter({ receipt, onClose }: ReceiptPrinterProps) {
         <hr className="my-2 border-dashed border-black" />
         {items.map((item) => (
           <div key={item.id} className="mb-1">
-            <p>{item.product_name}</p>
+            <p>
+              {item.product_name}
+              {item.unit_label ? ` (${item.unit_label})` : ""}
+            </p>
             <div className="flex justify-between">
               <span>
                 {item.quantity} × {formatCurrency(item.unit_price)}
