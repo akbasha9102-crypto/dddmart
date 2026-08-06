@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { BarcodeGenerator } from "./BarcodeGenerator";
 import { ProfitPreview } from "./ProfitPreview";
+import { ProductUnitsManager } from "./ProductUnitsManager";
 
 interface ProductFormProps {
   product?: Product | null;
@@ -130,6 +131,8 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
       </div>
 
       <Input label="الوحدة" value={unit} onChange={(event) => setUnit(event.target.value)} />
+
+      {product ? <ProductUnitsManager productId={product.id} /> : null}
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
