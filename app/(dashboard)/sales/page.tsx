@@ -1,122 +1,138 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import {
-  getDailySalesSummary,
-  getSalesTrend,
-  getTopCategories,
-  getTopProducts,
-} from "@/services/sales.service";
-import type { DailySalesPoint, TopCategoryStat, TopProductStat } from "@/services/sales.service";
-import type { Sale } from "@/types/pos";
+import { useState } from "react";
+import { useDailyReport } from "@/hooks/useDailyReport";
+import { useSalesAnalytics } from "@/hooks/useSalesAnalytics";
 import { DailyReport } from "@/components/features/sales/DailyReport";
 import { SalesTrendChart } from "@/components/features/sales/SalesTrendChart";
-import { TopProductsList } from "@/components/features/sales/TopProductsList";
-import { TopCategoriesList } from "@/components/features/sales/TopCategoriesList";
-import { cn } from "@/lib/utils";
+import { RankingList } from "@/components/features/sales/RankingList";
+import { RangeDatePicker } from "@/components/features/sales/RangeDatePicker";
+import type { CustomRange, PresetDays } from "@/components/features/sales/RangeDatePicker";
+import { Tabs } from "@/components/ui/Tabs";
+import { Modal } from "@/components/ui/Modal";
 
-type RangeOption = "7" | "30";
+type PageTab = "today" | "trend" | "ranking";
+type RankingSubTab = "categories" | "products";
 
-const RANGE_OPTIONS: { value: RangeOption; label: string }[] = [
-  { value: "7", label: "آخر 7 أيام" },
-  { value: "30", label: "آخر 30 يوماً" },
+const PAGE_TABS: { value: PageTab; label: string }[] = [
+  { value: "today", label: "اليوم" },
+  { value: "trend", label: "الاتجاه" },
+  { value: "ranking", label: "الترتيب" },
 ];
 
+const RANKING_SUB_TABS: { value: RankingSubTab; label: string }[] = [
+  { value: "categories", label: "الأقسام" },
+  { value: "products", label: "المنتجات" },
+];
+
+function todayCustomRange(): CustomRange {
+  const today = new Date().toISOString().slice(0, 10);
+  return { startDate: today, endDate: today };
+}
+
 export default function SalesPage() {
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [totalProfit, setTotalProfit] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<PageTab>("today");
+  const [rankingSubTab, setRankingSubTab] = useState<RankingSubTab>("categories");
+  const [selectedCategory, setSelectedCategory] = useState<{ id: string | null; name: string } | null>(null);
+  const [customRange, setCustomRange] = useState<CustomRange>(todayCustomRange());
 
-  const [range, setRange] = useState<RangeOption>("7");
-  const [trend, setTrend] = useState<DailySalesPoint[]>([]);
-  const [topProducts, setTopProducts] = useState<TopProductStat[]>([]);
-  const [topCategories, setTopCategories] = useState<TopCategoryStat[]>([]);
-  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(true);
+  const dailyReport = useDailyReport(new Date());
+  const analytics = useSalesAnalytics();
 
-  useEffect(() => {
-    const supabase = createClient();
-    void getDailySalesSummary(supabase, new Date()).then((summary) => {
-      setSales(summary.sales);
-      setTotalRevenue(summary.totalRevenue);
-      setTotalProfit(summary.totalProfit);
-      setIsLoading(false);
-    });
-  }, []);
+  function handleTabChange(tab: PageTab) {
+    setActiveTab(tab);
+    if (tab === "trend" || tab === "ranking") {
+      analytics.ensureLoaded();
+    }
+  }
 
-  const loadAnalytics = useCallback(async (days: number) => {
-    setIsAnalyticsLoading(true);
-    const supabase = createClient();
+  function handlePresetChange(days: PresetDays) {
+    setCustomRange(todayCustomRange());
+    analytics.setRange({ kind: "preset", days });
+  }
 
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - (days - 1));
-    startDate.setHours(0, 0, 0, 0);
+  function handleCustomRangeChange(range: CustomRange) {
+    setCustomRange(range);
+    if (!range.startDate || !range.endDate) return;
+    analytics.setRange({ kind: "custom", startDate: new Date(range.startDate), endDate: new Date(range.endDate) });
+  }
 
-    const [trendData, productsData, categoriesData] = await Promise.all([
-      getSalesTrend(supabase, days),
-      getTopProducts(supabase, startDate, endDate),
-      getTopCategories(supabase, startDate, endDate),
-    ]);
+  const currentPresetDays = analytics.range.kind === "preset" ? analytics.range.days : null;
 
-    setTrend(trendData);
-    setTopProducts(productsData);
-    setTopCategories(categoriesData);
-    setIsAnalyticsLoading(false);
-  }, []);
-
-  useEffect(() => {
-    void loadAnalytics(Number(range));
-  }, [range, loadAnalytics]);
+  const drilldownProducts = selectedCategory
+    ? analytics.productRanking.filter((product) => product.categoryId === selectedCategory.id)
+    : [];
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">تقرير مبيعات اليوم</h1>
-        {isLoading ? (
-          <p className="mt-4 text-gray-400">جارٍ التحميل...</p>
-        ) : (
-          <div className="mt-4">
-            <DailyReport sales={sales} totalRevenue={totalRevenue} totalProfit={totalProfit} />
-          </div>
-        )}
+        <h1 className="text-xl font-bold text-gray-900">تحليلات المبيعات</h1>
+        <Tabs options={PAGE_TABS} value={activeTab} onChange={handleTabChange} className="mt-4" />
       </div>
 
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">تحليلات المبيعات</h2>
-          <div className="flex gap-2">
-            {RANGE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setRange(option.value)}
-                className={cn(
-                  "rounded-full border px-4 py-2 text-sm font-medium transition-colors",
-                  range === option.value
-                    ? "border-brand-600 bg-brand-600 text-white"
-                    : "border-gray-200 bg-white text-gray-600",
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+      {activeTab === "today" ? (
+        <div>
+          {dailyReport.isLoading ? (
+            <p className="p-6 text-center text-gray-400">جارٍ التحميل...</p>
+          ) : dailyReport.error ? (
+            <p className="p-6 text-center text-red-600">{dailyReport.error}</p>
+          ) : dailyReport.data ? (
+            <DailyReport report={dailyReport.data} />
+          ) : null}
         </div>
+      ) : null}
 
-        {isAnalyticsLoading ? (
-          <p className="p-6 text-center text-gray-400">جارٍ التحميل...</p>
-        ) : (
-          <>
-            <SalesTrendChart data={trend} />
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <TopProductsList products={topProducts} />
-              <TopCategoriesList categories={topCategories} />
-            </div>
-          </>
-        )}
-      </div>
+      {activeTab === "trend" ? (
+        <div className="flex flex-col gap-4">
+          <RangeDatePicker
+            preset={currentPresetDays}
+            customRange={customRange}
+            onPresetChange={handlePresetChange}
+            onCustomRangeChange={handleCustomRangeChange}
+          />
+          {analytics.isLoading ? (
+            <p className="p-6 text-center text-gray-400">جارٍ التحميل...</p>
+          ) : analytics.error ? (
+            <p className="p-6 text-center text-red-600">{analytics.error}</p>
+          ) : (
+            <SalesTrendChart data={analytics.trend} />
+          )}
+        </div>
+      ) : null}
+
+      {activeTab === "ranking" ? (
+        <div className="flex flex-col gap-4">
+          <RangeDatePicker
+            preset={currentPresetDays}
+            customRange={customRange}
+            onPresetChange={handlePresetChange}
+            onCustomRangeChange={handleCustomRangeChange}
+          />
+          <Tabs options={RANKING_SUB_TABS} value={rankingSubTab} onChange={setRankingSubTab} />
+
+          {analytics.isLoading ? (
+            <p className="p-6 text-center text-gray-400">جارٍ التحميل...</p>
+          ) : analytics.error ? (
+            <p className="p-6 text-center text-red-600">{analytics.error}</p>
+          ) : rankingSubTab === "categories" ? (
+            <RankingList
+              title="ترتيب الأقسام"
+              items={analytics.categoryRanking}
+              onCategoryClick={(id, name) => setSelectedCategory({ id, name })}
+            />
+          ) : (
+            <RankingList title="ترتيب المنتجات" items={analytics.productRanking} />
+          )}
+        </div>
+      ) : null}
+
+      <Modal
+        open={selectedCategory !== null}
+        onClose={() => setSelectedCategory(null)}
+        title={selectedCategory ? `منتجات قسم: ${selectedCategory.name}` : undefined}
+      >
+        <RankingList title="" items={drilldownProducts} />
+      </Modal>
     </div>
   );
 }
