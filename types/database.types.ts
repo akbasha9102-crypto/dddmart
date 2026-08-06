@@ -184,6 +184,8 @@ export interface Database {
           quantity: number;
           unit_price: number;
           total_price: number;
+          unit_label: string | null;
+          unit_conversion_factor: number;
         };
         Insert: {
           id?: string;
@@ -194,6 +196,8 @@ export interface Database {
           quantity: number;
           unit_price: number;
           total_price: number;
+          unit_label?: string | null;
+          unit_conversion_factor?: number;
         };
         Update: {
           id?: string;
@@ -204,6 +208,8 @@ export interface Database {
           quantity?: number;
           unit_price?: number;
           total_price?: number;
+          unit_label?: string | null;
+          unit_conversion_factor?: number;
         };
         Relationships: [
           {
@@ -215,6 +221,53 @@ export interface Database {
           },
           {
             foreignKeyName: "sale_items_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      product_units: {
+        Row: {
+          id: string;
+          product_id: string;
+          unit_name: string;
+          conversion_factor: number;
+          barcode: string;
+          sale_price: number;
+          sort_order: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          unit_name: string;
+          conversion_factor: number;
+          barcode: string;
+          sale_price: number;
+          sort_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          unit_name?: string;
+          conversion_factor?: number;
+          barcode?: string;
+          sale_price?: number;
+          sort_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "product_units_product_id_fkey";
             columns: ["product_id"];
             isOneToOne: false;
             referencedRelation: "products";
