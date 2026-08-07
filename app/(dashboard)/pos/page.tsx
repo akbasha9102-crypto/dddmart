@@ -43,7 +43,7 @@ export default function POSPage() {
   const change = Math.max(paidNumber - totals.totalAmount, 0);
 
   return (
-    <div className="-m-3 flex h-[calc(100vh-4rem-4.25rem)] flex-col overflow-hidden bg-gray-50 md:-m-6 md:h-[calc(100vh-4rem)]">
+    <div className="-m-3 flex h-[calc(100vh-4rem-4.25rem)] flex-col overflow-hidden bg-gray-50 lg:-m-6 lg:h-[calc(100vh-4rem)]">
       <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
         <h1 className="text-lg font-bold text-brand-700">شاشة الكاشير</h1>
         <QuickKeys onCheckout={openCheckout} onClear={clear} />
@@ -53,15 +53,15 @@ export default function POSPage() {
         <OfflineBanner />
       </div>
 
-      <div className="flex flex-1 gap-4 overflow-hidden p-4">
-        <section className="flex flex-1 flex-col gap-4 overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex flex-1 flex-col gap-4 overflow-hidden p-4 lg:flex-row">
+        <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
           <div className="relative">
             <BarcodeScanner />
           </div>
           <CartGrid />
         </section>
 
-        <aside className="flex w-80 shrink-0 flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4">
+        <aside className="flex w-full shrink-0 flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 lg:w-80">
           <div className="flex flex-col gap-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">المجموع الفرعي</span>
