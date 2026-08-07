@@ -3,7 +3,7 @@ import { enqueueSale, markConflict, markSynced, markSyncing, nextPendingSale } f
 import type { PendingSale } from "@/types/offline";
 
 const BASE_PAYLOAD: PendingSale["payload"] = {
-  items: [{ productId: "p1", name: "منتج", barcode: "1111", unitPrice: 10, quantity: 1, availableStock: 8 }],
+  items: [{ productId: "p1", name: "منتج", barcode: "1111", unitPrice: 10, costPrice: 6, quantity: 1, availableStock: 8 }],
   discountAmount: 0,
   paidAmount: 10,
   cashierId: "cashier-1",

@@ -19,6 +19,7 @@ export function buildSaleItemRows(saleId: string, items: CheckoutPayload["items"
     total_price: item.unitPrice * item.quantity,
     unit_label: item.unitName ?? null,
     unit_conversion_factor: item.unitConversionFactor ?? 1,
+    cost_price: item.costPrice,
   }));
 }
 
@@ -121,9 +122,11 @@ export interface DailySalesSummary {
 }
 
 /**
- * Profit is estimated from each product's *current* cost_price, since
- * sale_items doesn't snapshot cost at sale time — fine for a same-day
- * report, but historical reports will drift if costs change later.
+ * Profit is computed from each sale_item's own snapshotted cost_price
+ * (captured at add-to-cart time), so historical reports stay accurate even
+ * after a product's current cost_price changes later. Pre-migration rows
+ * default to cost_price = 0 (unknown historical cost), which reads as
+ * "full sale price counted as profit" — expected, not an error.
  */
 export async function getDailySalesSummary(supabase: Client, date: Date): Promise<DailySalesSummary> {
   const sales = await getDailySales(supabase, date);
@@ -138,13 +141,13 @@ export async function getDailySalesSummary(supabase: Client, date: Date): Promis
   return { sales, salesCount: sales.length, totalRevenue, totalProfit };
 }
 
-/** Shared helper: fetches sale_items for a set of sales and estimates total profit from products' current cost_price. */
+/** Shared helper: fetches sale_items for a set of sales and sums profit from each row's own snapshotted cost_price. */
 async function computeProfitForSales(supabase: Client, sales: Sale[]): Promise<number> {
   if (sales.length === 0) return 0;
 
   const { data: items, error: itemsError } = await supabase
     .from("sale_items")
-    .select("product_id, quantity, unit_price")
+    .select("quantity, unit_price, cost_price")
     .in(
       "sale_id",
       sales.map((sale) => sale.id),
@@ -152,25 +155,7 @@ async function computeProfitForSales(supabase: Client, sales: Sale[]): Promise<n
 
   if (itemsError) throw itemsError;
 
-  const productIds = Array.from(
-    new Set((items ?? []).map((item) => item.product_id).filter((id): id is string => id !== null)),
-  );
-
-  const costByProductId = new Map<string, number>();
-  if (productIds.length > 0) {
-    const { data: products, error: productsError } = await supabase
-      .from("products")
-      .select("id, cost_price")
-      .in("id", productIds);
-
-    if (productsError) throw productsError;
-    (products ?? []).forEach((product) => costByProductId.set(product.id, product.cost_price));
-  }
-
-  return (items ?? []).reduce((sum, item) => {
-    const cost = item.product_id ? (costByProductId.get(item.product_id) ?? 0) : 0;
-    return sum + (item.unit_price - cost) * item.quantity;
-  }, 0);
+  return (items ?? []).reduce((sum, item) => sum + (item.unit_price - item.cost_price) * item.quantity, 0);
 }
 
 export interface HourlyBucket {
@@ -194,7 +179,7 @@ export interface DailyReportDetails {
   sales: Sale[];
   salesCount: number;
   totalRevenue: number;
-  /** Estimated from products' current cost_price — see getDailySalesSummary. */
+  /** Sum of each sale_item's own snapshotted cost_price — see getDailySalesSummary. */
   totalProfit: number;
   averageInvoiceValue: number;
   highestInvoice: Sale | null;
@@ -238,8 +223,8 @@ function buildComparison(current: { revenue: number; count: number }, previous: 
 
 /**
  * Rich single-day report: totals, invoice extremes, hourly distribution, and
- * comparisons vs. yesterday / same weekday last week. Profit figures are
- * estimated from products' current cost_price (see getDailySalesSummary).
+ * comparisons vs. yesterday / same weekday last week. Profit figures come
+ * from each sale_item's own snapshotted cost_price (see getDailySalesSummary).
  */
 export async function getDailyReportDetails(supabase: Client, date: Date): Promise<DailyReportDetails> {
   const sales = await getDailySales(supabase, date);
@@ -314,7 +299,7 @@ export async function getDailyReportDetails(supabase: Client, date: Date): Promi
 export interface DailySalesPoint {
   date: string;
   totalRevenue: number;
-  /** Estimated from products' current cost_price — see getDailySalesSummary. */
+  /** Sum of each sale_item's own snapshotted cost_price — see getDailySalesSummary. */
   totalProfit: number;
   salesCount: number;
   averageInvoiceValue: number;
@@ -342,7 +327,7 @@ function resolveTrendRange(range: SalesTrendRange): { startDate: Date; endDate: 
  * Buckets sales revenue/profit/count per calendar day (ascending), zero-filling
  * days with no sales so the chart doesn't skip gaps. Accepts either a rolling
  * "last N days" window or an explicit custom range, both capped at
- * MAX_RANGE_DAYS. Profit is estimated from products' current cost_price.
+ * MAX_RANGE_DAYS. Profit comes from each sale_item's own snapshotted cost_price.
  */
 export async function getSalesTrend(supabase: Client, range: SalesTrendRange): Promise<DailySalesPoint[]> {
   const { startDate, endDate } = resolveTrendRange(range);
@@ -362,29 +347,15 @@ export async function getSalesTrend(supabase: Client, range: SalesTrendRange): P
   if (saleRows.length > 0) {
     const { data: items, error: itemsError } = await supabase
       .from("sale_items")
-      .select("sale_id, product_id, quantity, unit_price")
+      .select("sale_id, quantity, unit_price, cost_price")
       .in(
         "sale_id",
         saleRows.map((sale) => sale.id),
       );
     if (itemsError) throw itemsError;
 
-    const productIds = Array.from(
-      new Set((items ?? []).map((item) => item.product_id).filter((id): id is string => id !== null)),
-    );
-
-    const costByProductId = new Map<string, number>();
-    if (productIds.length > 0) {
-      const { data: products, error: productsError } = await supabase
-        .from("products")
-        .select("id, cost_price")
-        .in("id", productIds);
-      if (productsError) throw productsError;
-      (products ?? []).forEach((product) => costByProductId.set(product.id, product.cost_price));
-    }
-
     (items ?? []).forEach((item) => {
-      const cost = item.product_id ? (costByProductId.get(item.product_id) ?? 0) : 0;
+      const cost = item.cost_price;
       const profit = (item.unit_price - cost) * item.quantity;
       profitBySaleId.set(item.sale_id, (profitBySaleId.get(item.sale_id) ?? 0) + profit);
     });
@@ -426,7 +397,7 @@ export interface ProductRankingStat {
   categoryName: string;
   totalQuantity: number;
   totalRevenue: number;
-  /** Estimated from the product's current cost_price — see getDailySalesSummary. */
+  /** Sum of this product's sale_items' own snapshotted cost_price — see getDailySalesSummary. */
   totalProfit: number;
   /** Share of this product's revenue out of the grand total for the range (0-100). 0 when there are no sales at all. */
   revenueSharePercent: number;
@@ -444,7 +415,7 @@ const UNCATEGORIZED_ICON = "ellipsis";
  * their sale_items), same pattern as getDailySalesSummary. Items whose
  * product was later deleted (product_id null) are grouped by their
  * snapshotted product_name and reported with categoryId: null / "أخرى".
- * Profit is estimated from products' current cost_price.
+ * Profit comes from each sale_item's own snapshotted cost_price.
  */
 export async function getProductRanking(supabase: Client, startDate: Date, endDate: Date): Promise<ProductRankingStat[]> {
   assertRangeWithinLimit(startDate, endDate);
@@ -460,7 +431,7 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
 
   const { data: items, error: itemsError } = await supabase
     .from("sale_items")
-    .select("sale_id, product_id, product_name, quantity, unit_price, total_price")
+    .select("sale_id, product_id, product_name, quantity, unit_price, total_price, cost_price")
     .in(
       "sale_id",
       sales.map((sale) => sale.id),
@@ -472,16 +443,14 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
     new Set((items ?? []).map((item) => item.product_id).filter((id): id is string => id !== null)),
   );
 
-  const productInfoById = new Map<string, { categoryId: string | null; costPrice: number }>();
+  const productInfoById = new Map<string, { categoryId: string | null }>();
   if (productIds.length > 0) {
     const { data: products, error: productsError } = await supabase
       .from("products")
-      .select("id, category_id, cost_price")
+      .select("id, category_id")
       .in("id", productIds);
     if (productsError) throw productsError;
-    (products ?? []).forEach((product) =>
-      productInfoById.set(product.id, { categoryId: product.category_id, costPrice: product.cost_price }),
-    );
+    (products ?? []).forEach((product) => productInfoById.set(product.id, { categoryId: product.category_id }));
   }
 
   const categoryIds = Array.from(
@@ -507,7 +476,7 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
     const key = item.product_id ?? `name:${item.product_name}`;
     const info = item.product_id ? productInfoById.get(item.product_id) : undefined;
     const categoryId = info?.categoryId ?? null;
-    const cost = info?.costPrice ?? 0;
+    const cost = item.cost_price;
     const profit = (item.unit_price - cost) * item.quantity;
 
     const existing = byKey.get(key);
@@ -557,7 +526,7 @@ export interface CategoryRankingStat {
   categoryIcon: string;
   totalQuantity: number;
   totalRevenue: number;
-  /** Estimated from products' current cost_price — see getDailySalesSummary. */
+  /** Sum of this category's sale_items' own snapshotted cost_price — see getDailySalesSummary. */
   totalProfit: number;
   /** Share of this category's revenue out of the grand total for the range (0-100). 0 when there are no sales at all. */
   revenueSharePercent: number;
@@ -571,7 +540,7 @@ export interface CategoryRankingStat {
  * getProductRanking, additionally joined (client-side) against products →
  * categories to bucket revenue per category. Items whose product or category
  * can no longer be resolved (deleted / never assigned) are bucketed under
- * "أخرى". Profit is estimated from products' current cost_price.
+ * "أخرى". Profit comes from each sale_item's own snapshotted cost_price.
  */
 export async function getCategoryRanking(supabase: Client, startDate: Date, endDate: Date): Promise<CategoryRankingStat[]> {
   assertRangeWithinLimit(startDate, endDate);
@@ -587,7 +556,7 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
 
   const { data: items, error: itemsError } = await supabase
     .from("sale_items")
-    .select("sale_id, product_id, quantity, unit_price, total_price")
+    .select("sale_id, product_id, quantity, unit_price, total_price, cost_price")
     .in(
       "sale_id",
       sales.map((sale) => sale.id),
@@ -599,16 +568,14 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
     new Set((items ?? []).map((item) => item.product_id).filter((id): id is string => id !== null)),
   );
 
-  const productInfoById = new Map<string, { categoryId: string | null; costPrice: number }>();
+  const productInfoById = new Map<string, { categoryId: string | null }>();
   if (productIds.length > 0) {
     const { data: products, error: productsError } = await supabase
       .from("products")
-      .select("id, category_id, cost_price")
+      .select("id, category_id")
       .in("id", productIds);
     if (productsError) throw productsError;
-    (products ?? []).forEach((product) =>
-      productInfoById.set(product.id, { categoryId: product.category_id, costPrice: product.cost_price }),
-    );
+    (products ?? []).forEach((product) => productInfoById.set(product.id, { categoryId: product.category_id }));
   }
 
   const categoryIds = Array.from(
@@ -636,7 +603,7 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
     const info = item.product_id ? productInfoById.get(item.product_id) : undefined;
     const categoryId = info?.categoryId ?? null;
     const category = categoryId ? categoryById.get(categoryId) : undefined;
-    const cost = info?.costPrice ?? 0;
+    const cost = item.cost_price;
     const profit = (item.unit_price - cost) * item.quantity;
     const key = categoryId ?? "__uncategorized__";
 

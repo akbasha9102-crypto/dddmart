@@ -31,7 +31,8 @@ function isCategoryStat(item: ProductRankingStat | CategoryRankingStat): item is
 /**
  * Generic ranked list for both products and categories: sort field + direction
  * toggle, "عرض المزيد" client-side pagination, and revenue share badge. Profit
- * figures are estimated (current cost_price, not cost at sale time).
+ * figures come from each sale's snapshotted cost at time of sale (accurate,
+ * not estimated from current cost_price).
  */
 export function RankingList({ title, items, onCategoryClick }: RankingListProps) {
   const [sortField, setSortField] = useState<SortField>("totalRevenue");

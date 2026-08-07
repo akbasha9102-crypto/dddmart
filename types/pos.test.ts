@@ -36,6 +36,11 @@ describe("productToCartItem", () => {
     expect(item.unitName).toBeUndefined();
     expect(item.unitConversionFactor).toBeUndefined();
   });
+
+  it("snapshots costPrice directly from the product's cost_price", () => {
+    const item = productToCartItem(PRODUCT, 3);
+    expect(item.costPrice).toBe(PRODUCT.cost_price);
+  });
 });
 
 describe("productUnitToCartItem", () => {
@@ -46,10 +51,16 @@ describe("productUnitToCartItem", () => {
       name: "علبة علك",
       barcode: "2222",
       unitPrice: 40,
+      costPrice: 24,
       quantity: 2,
       availableStock: 50,
       unitName: "كارتون",
       unitConversionFactor: 24,
     });
+  });
+
+  it("multiplies costPrice by the unit's conversion_factor", () => {
+    const item = productUnitToCartItem(PRODUCT, CARTON_UNIT, 2);
+    expect(item.costPrice).toBe(PRODUCT.cost_price * CARTON_UNIT.conversion_factor);
   });
 });

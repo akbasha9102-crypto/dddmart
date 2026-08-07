@@ -186,6 +186,7 @@ export interface Database {
           total_price: number;
           unit_label: string | null;
           unit_conversion_factor: number;
+          cost_price: number;
         };
         Insert: {
           id?: string;
@@ -198,6 +199,7 @@ export interface Database {
           total_price: number;
           unit_label?: string | null;
           unit_conversion_factor?: number;
+          cost_price?: number;
         };
         Update: {
           id?: string;
@@ -210,6 +212,7 @@ export interface Database {
           total_price?: number;
           unit_label?: string | null;
           unit_conversion_factor?: number;
+          cost_price?: number;
         };
         Relationships: [
           {

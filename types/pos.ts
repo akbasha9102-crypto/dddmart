@@ -12,6 +12,8 @@ export interface CartItem {
   name: string;
   barcode: string;
   unitPrice: number;
+  /** Cost price snapshotted at add-to-cart time — permanent once the sale is recorded, unaffected by later changes to the product's cost_price. */
+  costPrice: number;
   quantity: number;
   /** Stock remaining on hand immediately after this item was reserved (post-decrement), for display only — not used for any further stock arithmetic. */
   availableStock: number;
@@ -54,6 +56,7 @@ export function productToCartItem(product: Product, quantity = 1): CartItem {
     name: product.name,
     barcode: product.barcode,
     unitPrice: product.sale_price,
+    costPrice: product.cost_price,
     quantity,
     availableStock: product.quantity,
   };
@@ -65,6 +68,7 @@ export function productUnitToCartItem(product: Product, unit: ProductUnit, quant
     name: product.name,
     barcode: unit.barcode,
     unitPrice: unit.sale_price,
+    costPrice: product.cost_price * unit.conversion_factor,
     quantity,
     availableStock: product.quantity,
     unitName: unit.unit_name,

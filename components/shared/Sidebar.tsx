@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
 
 interface SidebarLink {
   href: string;
@@ -14,10 +17,13 @@ const LINKS: SidebarLink[] = [
 ];
 
 export function Sidebar({ activeHref }: { activeHref?: string }) {
+  const { role } = useAuth();
+  const links = LINKS.filter((link) => link.href !== "/sales" || role === "admin");
+
   return (
     <aside className="hidden w-56 shrink-0 border-l border-gray-200 bg-white p-4 md:block">
       <nav className="flex flex-col gap-1">
-        {LINKS.map((link) => (
+        {links.map((link) => (
           <Link
             key={link.href}
             href={link.href}

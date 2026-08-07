@@ -237,6 +237,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
               total_price: item.unitPrice * item.quantity,
               unit_label: item.unitName ?? null,
               unit_conversion_factor: item.unitConversionFactor ?? 1,
+              cost_price: item.costPrice,
             })),
             changeAmount,
           };

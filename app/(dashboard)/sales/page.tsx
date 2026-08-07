@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import { useDailyReport } from "@/hooks/useDailyReport";
 import { useSalesAnalytics } from "@/hooks/useSalesAnalytics";
 import { DailyReport } from "@/components/features/sales/DailyReport";
@@ -31,13 +32,25 @@ function todayCustomRange(): CustomRange {
 }
 
 export default function SalesPage() {
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
+
   const [activeTab, setActiveTab] = useState<PageTab>("today");
   const [rankingSubTab, setRankingSubTab] = useState<RankingSubTab>("categories");
   const [selectedCategory, setSelectedCategory] = useState<{ id: string | null; name: string } | null>(null);
   const [customRange, setCustomRange] = useState<CustomRange>(todayCustomRange());
 
-  const dailyReport = useDailyReport(new Date());
+  const dailyReport = useDailyReport(new Date(), isAdmin);
   const analytics = useSalesAnalytics();
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 p-10 text-center">
+        <p className="text-lg font-semibold text-gray-900">هذي الصفحة للمالك فقط</p>
+        <p className="text-sm text-gray-500">ما عندك صلاحية الوصول لتقارير المبيعات والأرباح.</p>
+      </div>
+    );
+  }
 
   function handleTabChange(tab: PageTab) {
     setActiveTab(tab);

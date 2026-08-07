@@ -4,7 +4,9 @@ import type { CartItem } from "@/types/pos";
 
 describe("buildSaleItemRows", () => {
   it("defaults unit_label to null and unit_conversion_factor to 1 for a base-unit sale", () => {
-    const items: CartItem[] = [{ productId: "p1", name: "منتج", barcode: "1111", unitPrice: 10, quantity: 2, availableStock: 8 }];
+    const items: CartItem[] = [
+      { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 10, costPrice: 1, quantity: 2, availableStock: 8 },
+    ];
 
     expect(buildSaleItemRows("sale-1", items)).toEqual([
       {
@@ -17,6 +19,7 @@ describe("buildSaleItemRows", () => {
         total_price: 20,
         unit_label: null,
         unit_conversion_factor: 1,
+        cost_price: 1,
       },
     ]);
   });
@@ -28,6 +31,7 @@ describe("buildSaleItemRows", () => {
         name: "منتج",
         barcode: "2222",
         unitPrice: 40,
+        costPrice: 24,
         quantity: 1,
         availableStock: 8,
         unitName: "كارتون",
@@ -38,6 +42,7 @@ describe("buildSaleItemRows", () => {
     expect(buildSaleItemRows("sale-1", items)[0]).toMatchObject({
       unit_label: "كارتون",
       unit_conversion_factor: 24,
+      cost_price: 24,
     });
   });
 });
