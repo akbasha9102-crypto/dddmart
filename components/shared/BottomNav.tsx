@@ -3,19 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/context/AuthContext";
-import { visibleNavLinks } from "./Navbar";
+import { PRIMARY_LINKS, isSettingsPath } from "./navLinks";
 
-/** Fixed bottom tab bar for mobile — primary navigation on small screens. */
+/** Fixed bottom tab bar — primary navigation on phones and tablets (lg:hidden on large desktop screens). */
 export function BottomNav() {
   const pathname = usePathname();
-  const { role } = useAuth();
-  const links = visibleNavLinks(role);
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex h-16 min-h-14 border-t border-gray-200 bg-white md:hidden">
-      {links.map((link) => {
-        const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex h-16 min-h-14 border-t border-gray-200 bg-white lg:hidden">
+      {PRIMARY_LINKS.map((link) => {
+        const isActive =
+          link.href === "/settings"
+            ? isSettingsPath(pathname)
+            : pathname === link.href || pathname.startsWith(`${link.href}/`);
         return (
           <Link
             key={link.href}
