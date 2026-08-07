@@ -2,29 +2,13 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/context/AuthContext";
-
-interface SidebarLink {
-  href: string;
-  label: string;
-}
-
-const LINKS: SidebarLink[] = [
-  { href: "/pos", label: "الكاشير" },
-  { href: "/inventory", label: "المنتجات" },
-  { href: "/sales", label: "تقارير المبيعات" },
-  { href: "/archive", label: "الأرشيف" },
-  { href: "/employees", label: "الموظفون" },
-];
+import { PRIMARY_LINKS } from "./navLinks";
 
 export function Sidebar({ activeHref }: { activeHref?: string }) {
-  const { role } = useAuth();
-  const links = LINKS.filter((link) => (link.href !== "/sales" && link.href !== "/employees") || role === "admin");
-
   return (
-    <aside className="hidden w-56 shrink-0 border-l border-gray-200 bg-white p-4 md:block">
+    <aside className="hidden w-56 shrink-0 border-l border-gray-200 bg-white p-4 lg:block">
       <nav className="flex flex-col gap-1">
-        {links.map((link) => (
+        {PRIMARY_LINKS.map((link) => (
           <Link
             key={link.href}
             href={link.href}
