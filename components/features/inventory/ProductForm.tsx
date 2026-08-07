@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { createProduct, updateProduct } from "@/services/products.service";
 import { useAuth } from "@/context/AuthContext";
+import { isAdminRole } from "@/lib/employees/adminCheck";
 import type { Product, Category } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -20,7 +21,7 @@ interface ProductFormProps {
 }
 
 export function ProductForm({ product, categories, onSaved, onCancel }: ProductFormProps) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [name, setName] = useState(product?.name ?? "");
   const [barcode, setBarcode] = useState(product?.barcode ?? "");
   const [categoryId, setCategoryId] = useState(product?.category_id ?? "");
@@ -95,15 +96,17 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Input
-          label="سعر التكلفة"
-          type="number"
-          min={0}
-          step="0.01"
-          value={costPrice}
-          onChange={(event) => setCostPrice(event.target.value)}
-          required
-        />
+        {isAdminRole(role) ? (
+          <Input
+            label="سعر التكلفة"
+            type="number"
+            min={0}
+            step="0.01"
+            value={costPrice}
+            onChange={(event) => setCostPrice(event.target.value)}
+            required
+          />
+        ) : null}
         <Input
           label="سعر البيع"
           type="number"
@@ -127,7 +130,9 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
           value={minStock}
           onChange={(event) => setMinStock(event.target.value)}
         />
-        <ProfitPreview costPrice={costPrice} salePrice={salePrice} className="col-span-2" />
+        {isAdminRole(role) ? (
+          <ProfitPreview costPrice={costPrice} salePrice={salePrice} className="col-span-2" />
+        ) : null}
       </div>
 
       <Input label="الوحدة" value={unit} onChange={(event) => setUnit(event.target.value)} />
