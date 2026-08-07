@@ -6,6 +6,7 @@ import { BarcodeScanner } from "@/components/features/pos/BarcodeScanner";
 import { CartGrid } from "@/components/features/pos/CartGrid";
 import { QuickKeys } from "@/components/features/pos/QuickKeys";
 import { ReceiptPrinter } from "@/components/features/pos/ReceiptPrinter";
+import { OfflineBanner } from "@/components/features/pos/OfflineBanner";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -47,6 +48,10 @@ export default function POSPage() {
         <h1 className="text-lg font-bold text-brand-700">شاشة الكاشير</h1>
         <QuickKeys onCheckout={openCheckout} onClear={clear} />
       </header>
+
+      <div className="px-4 pt-4">
+        <OfflineBanner />
+      </div>
 
       <div className="flex flex-1 gap-4 overflow-hidden p-4">
         <section className="flex flex-1 flex-col gap-4 overflow-hidden rounded-xl border border-gray-200 bg-white p-4">

@@ -32,6 +32,10 @@ export interface CheckoutPayload {
   discountAmount: number;
   paidAmount: number;
   cashierId: string | null;
+  /** Set when replaying a previously-queued offline sale so it syncs under the id its receipt already showed. Omitted (and left to the DB default) for a normal online checkout. */
+  id?: string;
+  /** Set when replaying a previously-queued offline sale so it keeps the invoice number its receipt already showed. Omitted (and auto-generated) for a normal online checkout. */
+  invoiceNumber?: string;
 }
 
 export interface CompletedSale {

@@ -5,11 +5,15 @@ import { createClient } from "@/lib/supabase/client";
 import { decrementStock, incrementStock, resolveBarcode } from "@/services/products.service";
 import { createSale } from "@/services/sales.service";
 import { useCart } from "@/hooks/useCart";
-import { findCartItemByBarcode, productToCartItem, productUnitToCartItem } from "@/types/pos";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { findCartItemByBarcode, productToCartItem, productUnitToCartItem, calculateTotals } from "@/types/pos";
 import type { CompletedSale } from "@/types/pos";
 import type { Product } from "@/types/product";
 import type { ProductUnit } from "@/types/product";
 import { toBaseUnits } from "@/lib/units";
+import { generateInvoiceNumber } from "@/lib/utils";
+import { addPendingSale } from "@/lib/offline/outbox";
+import { applyLocalStockDelta, getCachedCatalog, getCachedUnitsList, resolveBarcodeOffline } from "@/lib/offline/productCache";
 
 interface UsePOSOptions {
   cashierId: string | null;
@@ -17,6 +21,7 @@ interface UsePOSOptions {
 
 export function usePOS({ cashierId }: UsePOSOptions) {
   const cart = useCart();
+  const { isOnline } = useOnlineStatus();
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -25,8 +30,26 @@ export function usePOS({ cashierId }: UsePOSOptions) {
   const addProductToCart = useCallback(
     async (product: Product, quantity: number, unit?: ProductUnit) => {
       setScanError(null);
-      const supabase = createClient();
       const baseUnits = toBaseUnits(quantity, unit?.conversion_factor);
+
+      if (!isOnline) {
+        const { products: catalog } = await getCachedCatalog();
+        const cachedProduct = catalog.find((item) => item.id === product.id);
+        const currentQuantity = cachedProduct?.quantity ?? product.quantity;
+        if (currentQuantity - baseUnits < 0) {
+          setScanError(`الكمية المتوفرة من ${product.name} غير كافية`);
+          return;
+        }
+        const updated = await applyLocalStockDelta(product.id, -baseUnits);
+        if (!updated) {
+          setScanError(`الكمية المتوفرة من ${product.name} غير كافية`);
+          return;
+        }
+        cart.addItem(unit ? productUnitToCartItem(updated, unit, quantity) : productToCartItem(updated, quantity));
+        return;
+      }
+
+      const supabase = createClient();
       const updated = await decrementStock(supabase, product.id, baseUnits);
       if (!updated) {
         setScanError(`الكمية المتوفرة من ${product.name} غير كافية`);
@@ -34,7 +57,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
       }
       cart.addItem(unit ? productUnitToCartItem(updated, unit, quantity) : productToCartItem(updated, quantity));
     },
-    [cart],
+    [cart, isOnline],
   );
 
   const scanBarcode = useCallback(
@@ -42,6 +65,29 @@ export function usePOS({ cashierId }: UsePOSOptions) {
       setScanError(null);
       setIsScanning(true);
       try {
+        if (!isOnline) {
+          const { products: catalog } = await getCachedCatalog();
+          const units = await getCachedUnitsList();
+          const resolved = resolveBarcodeOffline(barcode, catalog, units);
+
+          if (!resolved) {
+            setScanError(`لم يتم العثور على منتج بالباركود: ${barcode}`);
+            return;
+          }
+
+          const { product } = resolved;
+          const unit = resolved.kind === "unit" ? resolved.unit : undefined;
+          const requiredBaseUnits = toBaseUnits(1, unit?.conversion_factor);
+
+          if (product.quantity < requiredBaseUnits) {
+            setScanError(`${product.name} غير متوفر في المخزون`);
+            return;
+          }
+
+          await addProductToCart(product, 1, unit);
+          return;
+        }
+
         const supabase = createClient();
         const resolved = await resolveBarcode(supabase, barcode);
 
@@ -66,7 +112,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
         setIsScanning(false);
       }
     },
-    [addProductToCart],
+    [addProductToCart, isOnline],
   );
 
   const updateQuantity = useCallback(
@@ -75,6 +121,19 @@ export function usePOS({ cashierId }: UsePOSOptions) {
       if (!item) return;
       const delta = quantity - item.quantity;
       const baseDelta = toBaseUnits(delta, item.unitConversionFactor);
+
+      if (!isOnline) {
+        if (baseDelta !== 0) {
+          const updated = await applyLocalStockDelta(item.productId, -baseDelta);
+          if (baseDelta > 0 && !updated) {
+            setScanError(`الكمية المتوفرة من ${item.name} غير كافية`);
+            return;
+          }
+        }
+        cart.updateQuantity(barcode, quantity);
+        return;
+      }
+
       const supabase = createClient();
       if (baseDelta < 0) {
         await incrementStock(supabase, item.productId, -baseDelta);
@@ -87,32 +146,106 @@ export function usePOS({ cashierId }: UsePOSOptions) {
       }
       cart.updateQuantity(barcode, quantity);
     },
-    [cart],
+    [cart, isOnline],
   );
 
   const removeItem = useCallback(
     async (barcode: string) => {
       const item = findCartItemByBarcode(cart.items, barcode);
       if (!item) return;
+
+      if (!isOnline) {
+        await applyLocalStockDelta(item.productId, toBaseUnits(item.quantity, item.unitConversionFactor));
+        cart.removeItem(barcode);
+        return;
+      }
+
       const supabase = createClient();
       await incrementStock(supabase, item.productId, toBaseUnits(item.quantity, item.unitConversionFactor));
       cart.removeItem(barcode);
     },
-    [cart],
+    [cart, isOnline],
   );
 
   const clear = useCallback(async () => {
+    if (!isOnline) {
+      await Promise.all(
+        cart.items.map((item) =>
+          applyLocalStockDelta(item.productId, toBaseUnits(item.quantity, item.unitConversionFactor)),
+        ),
+      );
+      cart.clear();
+      return;
+    }
+
     const supabase = createClient();
     await Promise.all(
       cart.items.map((item) => incrementStock(supabase, item.productId, toBaseUnits(item.quantity, item.unitConversionFactor))),
     );
     cart.clear();
-  }, [cart]);
+  }, [cart, isOnline]);
 
   const checkout = useCallback(
     async (paidAmount: number): Promise<CompletedSale> => {
       setIsCheckingOut(true);
       try {
+        if (!isOnline) {
+          const localId = crypto.randomUUID();
+          const invoiceNumber = generateInvoiceNumber();
+          const payload = {
+            items: cart.items,
+            discountAmount: cart.discountAmount,
+            paidAmount,
+            cashierId,
+            id: localId,
+            invoiceNumber,
+          };
+
+          await addPendingSale({
+            localId,
+            status: "pending",
+            createdAt: new Date().toISOString(),
+            payload,
+            invoiceNumber,
+          });
+
+          const { subtotal, discountAmount, totalAmount } = calculateTotals(cart.items, cart.discountAmount);
+          const changeAmount = Math.max(paidAmount - totalAmount, 0);
+          const now = new Date().toISOString();
+
+          const result: CompletedSale = {
+            sale: {
+              id: localId,
+              invoice_number: invoiceNumber,
+              cashier_id: cashierId,
+              subtotal,
+              discount_amount: discountAmount,
+              total_amount: totalAmount,
+              paid_amount: paidAmount,
+              change_amount: changeAmount,
+              payment_method: "cash",
+              created_at: now,
+            },
+            items: cart.items.map((item, index) => ({
+              id: `${localId}-${index}`,
+              sale_id: localId,
+              product_id: item.productId,
+              product_name: item.name,
+              barcode: item.barcode,
+              quantity: item.quantity,
+              unit_price: item.unitPrice,
+              total_price: item.unitPrice * item.quantity,
+              unit_label: item.unitName ?? null,
+              unit_conversion_factor: item.unitConversionFactor ?? 1,
+            })),
+            changeAmount,
+          };
+
+          setLastReceipt(result);
+          cart.clear();
+          return result;
+        }
+
         const supabase = createClient();
         const result = await createSale(supabase, {
           items: cart.items,
@@ -127,7 +260,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
         setIsCheckingOut(false);
       }
     },
-    [cart, cashierId],
+    [cart, cashierId, isOnline],
   );
 
   const dismissReceipt = useCallback(() => setLastReceipt(null), []);
@@ -148,6 +281,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
     isCheckingOut,
     lastReceipt,
     dismissReceipt,
+    isOnline,
   };
 }
 

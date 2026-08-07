@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { resolveBarcode } from "./products.service";
+import { listAllProductUnits, resolveBarcode } from "./products.service";
 import type { Database } from "@/types/database.types";
 import type { Product, ProductUnit } from "@/types/product";
 
@@ -72,5 +72,34 @@ describe("resolveBarcode", () => {
     const supabase = createFakeSupabase({ productsRow: null, unitRow: null });
     const result = await resolveBarcode(supabase, "9999");
     expect(result).toBeNull();
+  });
+});
+
+/**
+ * Hand-rolled fake covering only the chain listAllProductUnits actually
+ * calls: product_units.select().eq(). Not a general Supabase mock —
+ * deliberately minimal, matching createFakeSupabase above.
+ */
+function createFakeSupabaseForUnits(units: ProductUnit[]): SupabaseClient<Database> {
+  return {
+    from: () => ({
+      select: () => ({
+        eq: async () => ({ data: units, error: null }),
+      }),
+    }),
+  } as unknown as SupabaseClient<Database>;
+}
+
+describe("listAllProductUnits", () => {
+  it("returns all active product units", async () => {
+    const supabase = createFakeSupabaseForUnits([CARTON_UNIT]);
+    const result = await listAllProductUnits(supabase);
+    expect(result).toEqual([CARTON_UNIT]);
+  });
+
+  it("returns an empty array when there are none", async () => {
+    const supabase = createFakeSupabaseForUnits([]);
+    const result = await listAllProductUnits(supabase);
+    expect(result).toEqual([]);
   });
 });

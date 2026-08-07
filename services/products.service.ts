@@ -48,6 +48,18 @@ export async function resolveBarcode(
   return { kind: "unit", product: productRow, unit };
 }
 
+/**
+ * All active product_units across all products, used by
+ * lib/offline/productCache.ts to replicate the "kind: unit" (carton/multi-unit
+ * barcode) branch of resolveBarcode while offline.
+ */
+export async function listAllProductUnits(supabase: Client): Promise<ProductUnit[]> {
+  const { data, error } = await supabase.from("product_units").select("*").eq("is_active", true);
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function listProductUnits(supabase: Client, productId: string): Promise<ProductUnit[]> {
   const { data, error } = await supabase
     .from("product_units")

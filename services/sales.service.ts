@@ -40,6 +40,11 @@ function assertRangeWithinLimit(startDate: Date, endDate: Date): void {
  * / hooks/usePOS.ts#addProductToCart). Not wrapped in a DB transaction (no
  * RPC layer yet) — acceptable for a single-till MVP, revisit before
  * multi-till rollout.
+ *
+ * payload.id/payload.invoiceNumber let a previously-queued offline sale
+ * (see lib/offline/syncManager.ts) sync under the same identity its receipt
+ * already showed the cashier. Both are optional and unused by the normal
+ * online checkout path, which keeps generating them here as before.
  */
 export async function createSale(supabase: Client, payload: CheckoutPayload): Promise<CompletedSale> {
   if (payload.items.length === 0) {
@@ -52,7 +57,8 @@ export async function createSale(supabase: Client, payload: CheckoutPayload): Pr
   const { data: sale, error: saleError } = await supabase
     .from("sales")
     .insert({
-      invoice_number: generateInvoiceNumber(),
+      id: payload.id ?? undefined,
+      invoice_number: payload.invoiceNumber ?? generateInvoiceNumber(),
       cashier_id: payload.cashierId,
       subtotal,
       discount_amount: discountAmount,

@@ -4,9 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { usePOSContext } from "@/context/POSContext";
+import { useOfflineContext } from "@/context/OfflineContext";
 import { createClient } from "@/lib/supabase/client";
 import { listProductsWithCategory } from "@/services/products.service";
 import { listCategories } from "@/services/categories.service";
+import { getCachedCatalog } from "@/lib/offline/productCache";
+import { setCachedCategories, setCachedProducts } from "@/lib/offline/db";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -28,6 +31,7 @@ type Mode = "barcode" | "manual";
  */
 export function BarcodeScanner() {
   const { scanBarcode, isScanning, scanError, addProductToCart } = usePOSContext();
+  const { isOnline } = useOfflineContext();
   const [manualValue, setManualValue] = useState("");
   const [mode, setMode] = useState<Mode>("barcode");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -48,6 +52,13 @@ export function BarcodeScanner() {
 
   useEffect(() => {
     async function loadData() {
+      if (!isOnline) {
+        const cached = await getCachedCatalog();
+        setProducts(cached.products);
+        setCategories(cached.categories);
+        return;
+      }
+
       const supabase = createClient();
       const [productList, categoryList] = await Promise.all([
         listProductsWithCategory(supabase),
@@ -55,9 +66,12 @@ export function BarcodeScanner() {
       ]);
       setProducts(productList);
       setCategories(categoryList);
+      // Keep IndexedDB warm for the next offline period.
+      void setCachedProducts(productList);
+      void setCachedCategories(categoryList);
     }
     void loadData();
-  }, []);
+  }, [isOnline]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
