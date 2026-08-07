@@ -6,6 +6,7 @@ import { isLowStock } from "@/types/product";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { ConfirmInline } from "@/components/ui/ConfirmInline";
+import { Card } from "@/components/ui/Card";
 
 interface StockTableProps {
   products: Product[];
@@ -21,55 +22,52 @@ export function StockTable({ products, onEdit, onDelete }: StockTableProps) {
   }
 
   return (
-    <table className="w-full text-right text-sm">
-      <thead className="bg-gray-100 text-gray-500">
-        <tr>
-          <th className="p-3 font-medium">المنتج</th>
-          <th className="p-3 font-medium">الباركود</th>
-          <th className="p-3 font-medium">سعر البيع</th>
-          <th className="p-3 font-medium">الكمية</th>
-          <th className="p-3" />
-        </tr>
-      </thead>
-      <tbody>
-        {products.map((product) => (
-          <tr key={product.id} className="border-b border-gray-100">
-            <td className="p-3 font-medium text-gray-900">{product.name}</td>
-            <td className="p-3 font-mono text-gray-500">{product.barcode}</td>
-            <td className="p-3">{formatCurrency(product.sale_price)}</td>
-            <td className={cn("p-3 font-semibold", isLowStock(product) && "text-red-600")}>
-              {product.quantity}
-              {isLowStock(product) ? " ⚠" : ""}
-            </td>
-            <td className="p-3">
-              {confirmingId === product.id ? (
-                <ConfirmInline
-                  message="تأكيد الحذف؟"
-                  confirmLabel="حذف"
-                  onConfirm={() => {
-                    setConfirmingId(null);
-                    onDelete(product);
-                  }}
-                  onCancel={() => setConfirmingId(null)}
-                />
-              ) : (
-                <div className="flex items-center gap-3">
-                  <button type="button" onClick={() => onEdit(product)} className="text-brand-700 hover:underline">
-                    تعديل
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingId(product.id)}
-                    className="text-red-600 hover:underline"
-                  >
-                    حذف
-                  </button>
-                </div>
-              )}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <Card className="divide-y divide-gray-100 p-0">
+      {products.map((product) => (
+        <div key={product.id} className="p-4">
+          {confirmingId === product.id ? (
+            <ConfirmInline
+              message="تأكيد الحذف؟"
+              confirmLabel="حذف"
+              onConfirm={() => {
+                setConfirmingId(null);
+                onDelete(product);
+              }}
+              onCancel={() => setConfirmingId(null)}
+            />
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-medium text-gray-900">{product.name}</span>
+                <span className="font-mono text-sm text-gray-500">{product.barcode}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="text-gray-600">{formatCurrency(product.sale_price)}</span>
+                <span className={cn("font-semibold", isLowStock(product) && "text-red-600")}>
+                  {product.quantity}
+                  {isLowStock(product) ? " ⚠" : ""}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => onEdit(product)}
+                  className="flex h-11 flex-1 items-center justify-center rounded-lg text-brand-700 hover:bg-brand-50"
+                >
+                  تعديل
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingId(product.id)}
+                  className="flex h-11 flex-1 items-center justify-center rounded-lg text-red-600 hover:bg-red-50"
+                >
+                  حذف
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </Card>
   );
 }
