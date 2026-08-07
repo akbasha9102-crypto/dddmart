@@ -20,7 +20,10 @@ interface ManualProductPickerProps {
  * rows are selectable (with a quantity stepper) instead of read-only.
  */
 export function ManualProductPicker({ products, categories, onAdd }: ManualProductPickerProps) {
-  const groups = useMemo(() => groupProductsByCategory(products, categories), [products, categories]);
+  const groups = useMemo(
+    () => groupProductsByCategory(products, categories).filter((group) => group.products.length > 0),
+    [products, categories],
+  );
 
   const [activeId, setActiveId] = useState<string | null>(groups[0]?.id ?? null);
   const activeGroup = groups.find((group) => group.id === activeId) ?? groups[0] ?? null;

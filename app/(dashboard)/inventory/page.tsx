@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import type { Product, ProductWithCategory, Category } from "@/types/product";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { StockTable } from "@/components/features/inventory/StockTable";
 import { CategoryProductList } from "@/components/features/inventory/CategoryProductList";
@@ -29,6 +30,7 @@ export default function InventoryPage() {
   const [isAddChoiceOpen, setIsAddChoiceOpen] = useState(false);
   const [isCategoryFormOpen, setIsCategoryFormOpen] = useState(false);
   const [isCategoryManageOpen, setIsCategoryManageOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -78,6 +80,14 @@ export default function InventoryPage() {
     void loadData();
   }
 
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredProducts = normalizedQuery
+    ? products.filter((product) => product.name.toLowerCase().includes(normalizedQuery))
+    : products;
+  const filteredProductsWithCategory = normalizedQuery
+    ? productsWithCategory.filter((product) => product.name.toLowerCase().includes(normalizedQuery))
+    : productsWithCategory;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -95,20 +105,28 @@ export default function InventoryPage() {
         </div>
       </div>
 
+      <Input
+        type="text"
+        placeholder="ابحث عن منتج بالاسم..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        aria-label="بحث عن منتج"
+      />
+
       {isLoading ? (
         <p className="p-6 text-center text-gray-400">جارٍ التحميل...</p>
       ) : (
         <>
           <div className="md:hidden">
             <CategoryProductList
-              products={productsWithCategory}
+              products={filteredProductsWithCategory}
               categories={categories}
               onEdit={openEditForm}
               onDelete={handleDeleteProduct}
             />
           </div>
           <Card className="hidden overflow-hidden p-0 md:block">
-            <StockTable products={products} onEdit={openEditForm} onDelete={handleDeleteProduct} />
+            <StockTable products={filteredProducts} onEdit={openEditForm} onDelete={handleDeleteProduct} />
           </Card>
         </>
       )}

@@ -59,9 +59,13 @@ export function CategoryProductList({ products, categories, onEdit, onDelete }: 
       </div>
 
       <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-3">
-        {activeGroup?.products.map((product) => (
-          <ProductRow key={product.id} product={product} onEdit={onEdit} onDelete={onDelete} />
-        ))}
+        {activeGroup && activeGroup.products.length === 0 ? (
+          <p className="p-6 text-center text-gray-400">لا توجد منتجات بهذا القسم</p>
+        ) : (
+          activeGroup?.products.map((product) => (
+            <ProductRow key={product.id} product={product} onEdit={onEdit} onDelete={onDelete} />
+          ))
+        )}
       </div>
     </div>
   );

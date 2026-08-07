@@ -17,7 +17,9 @@ export const OTHER_CATEGORY_ICON = "ellipsis";
  * Groups a product list by category (sorted by sort_order), appending an
  * "أخرى" group for products with no category_id. Shared by
  * CategoryProductList and ManualProductPicker, which previously duplicated
- * this logic locally.
+ * this logic locally. Every category produces a group even if it has zero
+ * matching products; callers that don't want empty tabs (e.g.
+ * ManualProductPicker) should filter the result themselves.
  */
 export function groupProductsByCategory<T extends { category_id: string | null }>(
   products: T[],
@@ -25,15 +27,13 @@ export function groupProductsByCategory<T extends { category_id: string | null }
 ): CategoryGroup<T>[] {
   const sortedCategories = [...categories].sort((a, b) => a.sort_order - b.sort_order);
 
-  const groups = sortedCategories
-    .map((category) => ({
-      id: category.id,
-      label: category.name,
-      color: category.color,
-      icon: category.icon,
-      products: products.filter((product) => product.category_id === category.id),
-    }))
-    .filter((group) => group.products.length > 0);
+  const groups = sortedCategories.map((category) => ({
+    id: category.id,
+    label: category.name,
+    color: category.color,
+    icon: category.icon,
+    products: products.filter((product) => product.category_id === category.id),
+  }));
 
   const uncategorized = products.filter((product) => product.category_id === null);
   if (uncategorized.length > 0) {
