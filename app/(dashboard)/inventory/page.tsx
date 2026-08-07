@@ -89,7 +89,7 @@ export default function InventoryPage() {
     : productsWithCategory;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">إدارة المخزون</h1>

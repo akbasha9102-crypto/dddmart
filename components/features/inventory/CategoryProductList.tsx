@@ -24,11 +24,11 @@ export function CategoryProductList({ products, categories, onEdit, onDelete }: 
   const activeGroup = groups.find((group) => group.id === activeId) ?? groups[0] ?? null;
 
   if (products.length === 0) {
-    return <p className="p-6 text-center text-gray-400">لا توجد منتجات بعد — أضف أول منتج</p>;
+    return <p className="p-4 text-center text-gray-400">لا توجد منتجات بعد — أضف أول منتج</p>;
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {groups.map((group) => {
           const isActive = activeGroup?.id === group.id;
@@ -39,7 +39,7 @@ export function CategoryProductList({ products, categories, onEdit, onDelete }: 
               type="button"
               onClick={() => setActiveId(group.id)}
               className={cn(
-                "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+                "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
                 isActive ? "text-white" : "bg-white text-gray-600",
               )}
               style={
@@ -58,9 +58,9 @@ export function CategoryProductList({ products, categories, onEdit, onDelete }: 
         })}
       </div>
 
-      <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-3">
+      <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2.5">
         {activeGroup && activeGroup.products.length === 0 ? (
-          <p className="p-6 text-center text-gray-400">لا توجد منتجات بهذا القسم</p>
+          <p className="p-4 text-center text-gray-400">لا توجد منتجات بهذا القسم</p>
         ) : (
           activeGroup?.products.map((product) => (
             <ProductRow key={product.id} product={product} onEdit={onEdit} onDelete={onDelete} />
