@@ -8,11 +8,14 @@ export const NAV_LINKS = [
   { href: "/inventory", label: "المخزون" },
   { href: "/sales", label: "المبيعات" },
   { href: "/archive", label: "الأرشيف" },
+  { href: "/employees", label: "الموظفون" },
 ];
+
+const ADMIN_ONLY_PATHS = ["/sales", "/employees"];
 
 /** Filters NAV_LINKS down to what `role` is allowed to see — shared by Navbar and BottomNav.tsx (which imports NAV_LINKS directly and must filter it itself). */
 export function visibleNavLinks(role: string | null) {
-  return NAV_LINKS.filter((link) => link.href !== "/sales" || role === "admin");
+  return NAV_LINKS.filter((link) => !ADMIN_ONLY_PATHS.includes(link.href) || role === "admin");
 }
 
 export function Navbar() {

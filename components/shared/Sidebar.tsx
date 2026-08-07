@@ -14,11 +14,12 @@ const LINKS: SidebarLink[] = [
   { href: "/inventory", label: "المنتجات" },
   { href: "/sales", label: "تقارير المبيعات" },
   { href: "/archive", label: "الأرشيف" },
+  { href: "/employees", label: "الموظفون" },
 ];
 
 export function Sidebar({ activeHref }: { activeHref?: string }) {
   const { role } = useAuth();
-  const links = LINKS.filter((link) => link.href !== "/sales" || role === "admin");
+  const links = LINKS.filter((link) => (link.href !== "/sales" && link.href !== "/employees") || role === "admin");
 
   return (
     <aside className="hidden w-56 shrink-0 border-l border-gray-200 bg-white p-4 md:block">
