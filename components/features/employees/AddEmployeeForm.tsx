@@ -28,7 +28,7 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
       const response = await fetch("/api/employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ full_name: fullName, email, password }),
+        body: JSON.stringify({ full_name: fullName.trim(), email: email.trim(), password: password.trim() }),
       });
 
       const result = await response.json();
@@ -63,6 +63,8 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
         type="email"
         value={email}
         onChange={(event) => setEmail(event.target.value)}
+        autoCapitalize="off"
+        autoCorrect="off"
         required
       />
       <Input
@@ -71,6 +73,9 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         minLength={6}
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
         required
       />
 

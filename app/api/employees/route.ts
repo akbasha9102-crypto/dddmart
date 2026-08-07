@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
   const fullName = body.full_name?.trim();
   const email = body.email?.trim();
-  const password = body.password;
+  const password = body.password?.trim();
 
   if (!fullName || !email || !password) {
     return NextResponse.json({ error: "الاسم الكامل والإيميل وكلمة المرور مطلوبين" }, { status: 400 });
