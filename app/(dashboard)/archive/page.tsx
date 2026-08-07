@@ -7,6 +7,7 @@ import type { OperationLog } from "@/types/archive";
 import type { OperationEntityType } from "@/types/database.types";
 import { ArchiveList } from "@/components/features/archive/ArchiveList";
 import { cn } from "@/lib/utils";
+import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
 
 type RangeOption = "today" | "7" | "30" | "all";
 
@@ -63,6 +64,7 @@ export default function ArchivePage() {
 
   return (
     <div className="flex flex-col gap-4">
+      <BackToSettingsLink />
       <h1 className="text-xl font-bold text-gray-900">الأرشيف</h1>
 
       <div className="flex flex-col gap-2">

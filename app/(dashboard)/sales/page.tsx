@@ -11,6 +11,7 @@ import { RangeDatePicker } from "@/components/features/sales/RangeDatePicker";
 import type { CustomRange, PresetDays } from "@/components/features/sales/RangeDatePicker";
 import { Tabs } from "@/components/ui/Tabs";
 import { Modal } from "@/components/ui/Modal";
+import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
 
 type PageTab = "today" | "trend" | "ranking";
 type RankingSubTab = "categories" | "products";
@@ -79,6 +80,7 @@ export default function SalesPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
+        <BackToSettingsLink />
         <h1 className="text-xl font-bold text-gray-900">تحليلات المبيعات</h1>
         <Tabs options={PAGE_TABS} value={activeTab} onChange={handleTabChange} className="mt-4" />
       </div>

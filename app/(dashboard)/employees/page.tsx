@@ -8,6 +8,7 @@ import { EmployeeList } from "@/components/features/employees/EmployeeList";
 import { AddEmployeeForm } from "@/components/features/employees/AddEmployeeForm";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
 
 export default function EmployeesPage() {
   const { user, role } = useAuth();
@@ -52,11 +53,14 @@ export default function EmployeesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">الموظفون</h1>
-        <Button size="sm" onClick={() => setIsAddModalOpen(true)}>
-          + إضافة كاشير
-        </Button>
+      <div>
+        <BackToSettingsLink />
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-gray-900">الموظفون</h1>
+          <Button size="sm" onClick={() => setIsAddModalOpen(true)}>
+            + إضافة كاشير
+          </Button>
+        </div>
       </div>
 
       {toggleError ? <p className="text-sm text-red-600">{toggleError}</p> : null}
