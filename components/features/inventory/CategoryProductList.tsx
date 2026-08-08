@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PackagePlus, Pencil, Trash2 } from "lucide-react";
+import { PackagePlus, PackageX, Pencil, Trash2 } from "lucide-react";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { isLowStock } from "@/types/product";
 import { cn } from "@/lib/utils";
@@ -17,10 +17,11 @@ interface CategoryProductListProps {
   onEdit: (product: ProductWithCategory) => void;
   onDelete: (product: ProductWithCategory) => void;
   onReceiveStock: (product: ProductWithCategory) => void;
+  onDamageStock: (product: ProductWithCategory) => void;
 }
 
 /** Mobile-first grouped product list — horizontal category tabs + active panel. Primary product-management surface on mobile, so edit/delete live here too. */
-export function CategoryProductList({ products, categories, onEdit, onDelete, onReceiveStock }: CategoryProductListProps) {
+export function CategoryProductList({ products, categories, onEdit, onDelete, onReceiveStock, onDamageStock }: CategoryProductListProps) {
   const groups = useMemo(() => groupProductsByCategory(products, categories), [products, categories]);
 
   const [activeId, setActiveId] = useState<string | null>(groups[0]?.id ?? null);
@@ -72,6 +73,7 @@ export function CategoryProductList({ products, categories, onEdit, onDelete, on
               onEdit={onEdit}
               onDelete={onDelete}
               onReceiveStock={onReceiveStock}
+              onDamageStock={onDamageStock}
             />
           ))
         )}
@@ -85,11 +87,13 @@ function ProductRow({
   onEdit,
   onDelete,
   onReceiveStock,
+  onDamageStock,
 }: {
   product: ProductWithCategory;
   onEdit: (product: ProductWithCategory) => void;
   onDelete: (product: ProductWithCategory) => void;
   onReceiveStock: (product: ProductWithCategory) => void;
+  onDamageStock: (product: ProductWithCategory) => void;
 }) {
   const { role } = useAuth();
   const [confirming, setConfirming] = useState(false);
@@ -124,6 +128,16 @@ function ProductRow({
             aria-label="استلام مخزون"
           >
             <PackagePlus className="h-4 w-4" />
+          </button>
+        ) : null}
+        {isAdminRole(role) ? (
+          <button
+            type="button"
+            onClick={() => onDamageStock(product)}
+            className="rounded-md p-1.5 text-gray-500 hover:bg-orange-100 hover:text-orange-700"
+            aria-label="تسجيل تلف"
+          >
+            <PackageX className="h-4 w-4" />
           </button>
         ) : null}
         <button

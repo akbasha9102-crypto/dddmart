@@ -23,6 +23,7 @@ import { ProductForm } from "@/components/features/inventory/ProductForm";
 import { CategoryForm } from "@/components/features/inventory/CategoryForm";
 import { CategoryManageSheet } from "@/components/features/inventory/CategoryManageSheet";
 import { ReceiveStockForm } from "@/components/features/inventory/ReceiveStockForm";
+import { DamageStockForm } from "@/components/features/inventory/DamageStockForm";
 
 export default function InventoryPage() {
   const { user } = useAuth();
@@ -40,6 +41,7 @@ export default function InventoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [receivingStockFor, setReceivingStockFor] = useState<Product | ProductWithCategory | null>(null);
   const [receivingStockUnits, setReceivingStockUnits] = useState<ProductUnit[]>([]);
+  const [damagingStockFor, setDamagingStockFor] = useState<Product | ProductWithCategory | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -92,6 +94,11 @@ export default function InventoryPage() {
 
   function handleStockReceived() {
     setReceivingStockFor(null);
+    void loadData();
+  }
+
+  function handleStockDamaged() {
+    setDamagingStockFor(null);
     void loadData();
   }
 
@@ -155,6 +162,7 @@ export default function InventoryPage() {
               onEdit={openEditForm}
               onDelete={handleDeleteProduct}
               onReceiveStock={openReceiveStockForm}
+              onDamageStock={setDamagingStockFor}
             />
           </div>
           <Card className="hidden overflow-hidden p-0 md:block">
@@ -163,6 +171,7 @@ export default function InventoryPage() {
               onEdit={openEditForm}
               onDelete={handleDeleteProduct}
               onReceiveStock={openReceiveStockForm}
+              onDamageStock={setDamagingStockFor}
             />
           </Card>
         </>
@@ -225,6 +234,12 @@ export default function InventoryPage() {
             onSaved={handleStockReceived}
             onCancel={() => setReceivingStockFor(null)}
           />
+        ) : null}
+      </Modal>
+
+      <Modal open={damagingStockFor !== null} onClose={() => setDamagingStockFor(null)} title="تسجيل تلف مخزون">
+        {damagingStockFor ? (
+          <DamageStockForm product={damagingStockFor} onSaved={handleStockDamaged} onCancel={() => setDamagingStockFor(null)} />
         ) : null}
       </Modal>
 

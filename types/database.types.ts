@@ -15,7 +15,9 @@ export type OperationActionType =
   | "category_updated"
   | "category_deleted"
   | "stock_adjusted"
-  | "stock_received";
+  | "stock_received"
+  | "return_created"
+  | "damage_recorded";
 export type OperationEntityType = "product" | "category" | "sale" | "stock";
 
 export interface Database {
@@ -275,6 +277,131 @@ export interface Database {
             columns: ["product_id"];
             isOneToOne: false;
             referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      returns: {
+        Row: {
+          id: string;
+          sale_id: string;
+          sale_item_id: string;
+          product_id: string | null;
+          product_name: string;
+          quantity: number;
+          unit_label: string | null;
+          unit_conversion_factor: number;
+          refund_amount: number;
+          reason: string | null;
+          actor_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          sale_id: string;
+          sale_item_id: string;
+          product_id?: string | null;
+          product_name: string;
+          quantity: number;
+          unit_label?: string | null;
+          unit_conversion_factor?: number;
+          refund_amount: number;
+          reason?: string | null;
+          actor_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          sale_id?: string;
+          sale_item_id?: string;
+          product_id?: string | null;
+          product_name?: string;
+          quantity?: number;
+          unit_label?: string | null;
+          unit_conversion_factor?: number;
+          refund_amount?: number;
+          reason?: string | null;
+          actor_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "returns_sale_id_fkey";
+            columns: ["sale_id"];
+            isOneToOne: false;
+            referencedRelation: "sales";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "returns_sale_item_id_fkey";
+            columns: ["sale_item_id"];
+            isOneToOne: false;
+            referencedRelation: "sale_items";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "returns_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "returns_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      stock_damages: {
+        Row: {
+          id: string;
+          product_id: string | null;
+          product_name: string;
+          quantity: number;
+          cost_price: number;
+          loss_amount: number;
+          reason: string | null;
+          actor_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id?: string | null;
+          product_name: string;
+          quantity: number;
+          cost_price: number;
+          loss_amount: number;
+          reason?: string | null;
+          actor_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string | null;
+          product_name?: string;
+          quantity?: number;
+          cost_price?: number;
+          loss_amount?: number;
+          reason?: string | null;
+          actor_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "stock_damages_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "stock_damages_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];

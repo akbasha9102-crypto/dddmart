@@ -1,6 +1,6 @@
 "use client";
 
-import { PackagePlus, Pencil, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { PackagePlus, PackageX, Pencil, Plus, ShoppingCart, Trash2, Undo2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { OperationLog } from "@/types/archive";
 import type { OperationActionType } from "@/types/database.types";
@@ -22,6 +22,8 @@ const ACTION_ICON_MAP: Record<OperationActionType, LucideIcon> = {
   category_deleted: Trash2,
   stock_adjusted: Pencil,
   stock_received: PackagePlus,
+  return_created: Undo2,
+  damage_recorded: PackageX,
 };
 
 /** Chronological (newest first) list of logged operations — a list rather than a table since Arabic sentences vary in length. */

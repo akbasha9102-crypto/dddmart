@@ -35,6 +35,116 @@ function assertRangeWithinLimit(startDate: Date, endDate: Date): void {
 }
 
 /**
+ * One return row enriched with its original sale line's unit_price/cost_price,
+ * used to compute the profit-reversal of a return (see ReturnWithLineProfit
+ * usage below) — deliberately NOT using refund_amount for that calc, since a
+ * partial/overridden refund shouldn't distort the profit-reversal math.
+ */
+interface ReturnForReporting {
+  sale_item_id: string;
+  product_id: string | null;
+  product_name: string;
+  quantity: number;
+  refund_amount: number;
+  created_at: string;
+}
+
+interface SaleItemProfitInfo {
+  unit_price: number;
+  cost_price: number;
+}
+
+/**
+ * Fetches returns whose `created_at` falls in range — returns net against
+ * the day they're RETURNED, not the day of the original sale (see plan
+ * rationale in services/returns.service.ts / docs). Also fetches the
+ * referenced sale_items rows (keyed by sale_item_id) so callers can compute
+ * each return's true profit reversal from the original line's actual
+ * margin, proportional to quantity returned.
+ */
+async function getReturnsInRange(
+  supabase: Client,
+  startDate: Date,
+  endDate: Date,
+): Promise<{ returns: ReturnForReporting[]; saleItemById: Map<string, SaleItemProfitInfo> }> {
+  const { data: returnRows, error: returnsError } = await supabase
+    .from("returns")
+    .select("sale_item_id, product_id, product_name, quantity, refund_amount, created_at")
+    .gte("created_at", startDate.toISOString())
+    .lte("created_at", endDate.toISOString());
+
+  if (returnsError) throw returnsError;
+
+  const returns = returnRows ?? [];
+  const saleItemById = new Map<string, SaleItemProfitInfo>();
+
+  if (returns.length > 0) {
+    const { data: saleItems, error: saleItemsError } = await supabase
+      .from("sale_items")
+      .select("id, unit_price, cost_price")
+      .in(
+        "id",
+        returns.map((row) => row.sale_item_id),
+      );
+    if (saleItemsError) throw saleItemsError;
+    (saleItems ?? []).forEach((item) => saleItemById.set(item.id, { unit_price: item.unit_price, cost_price: item.cost_price }));
+  }
+
+  return { returns, saleItemById };
+}
+
+/** Reverses the original line's actual margin proportional to quantity returned — never uses refund_amount (see getReturnsInRange doc). */
+function computeReturnsProfitReversal(returns: ReturnForReporting[], saleItemById: Map<string, SaleItemProfitInfo>): number {
+  return returns.reduce((sum, row) => {
+    const line = saleItemById.get(row.sale_item_id);
+    if (!line) return sum;
+    return sum + (line.unit_price - line.cost_price) * row.quantity;
+  }, 0);
+}
+
+function sumRefundAmount(returns: ReturnForReporting[]): number {
+  return returns.reduce((sum, row) => sum + row.refund_amount, 0);
+}
+
+interface DamageForReporting {
+  product_id: string | null;
+  product_name: string;
+  loss_amount: number;
+  created_at: string;
+}
+
+/** Fetches stock_damages whose `created_at` falls in range. */
+async function getDamagesInRange(supabase: Client, startDate: Date, endDate: Date): Promise<DamageForReporting[]> {
+  const { data, error } = await supabase
+    .from("stock_damages")
+    .select("product_id, product_name, loss_amount, created_at")
+    .gte("created_at", startDate.toISOString())
+    .lte("created_at", endDate.toISOString());
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+function sumLossAmount(damages: DamageForReporting[]): number {
+  return damages.reduce((sum, row) => sum + row.loss_amount, 0);
+}
+
+/** Start/end-of-day bounds for a single calendar date, matching getDailySales'/getDayTotals' existing convention. */
+function dayBounds(date: Date): { dayStart: Date; dayEnd: Date } {
+  const dayStart = new Date(date);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(date);
+  dayEnd.setHours(23, 59, 59, 999);
+  return { dayStart, dayEnd };
+}
+
+/** Local-calendar-day key (YYYY-MM-DD), shared by getSalesTrend's sale/return/damage bucketing so they align on the same day boundaries. */
+function dayKeyOf(value: string | Date): string {
+  const day = new Date(value);
+  return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+}
+
+/**
  * Persists a completed cash sale: the invoice header and its line items.
  * Stock is no longer touched here — it's decremented atomically at
  * add-to-cart time instead (see services/products.service.ts#decrementStock
@@ -117,8 +227,14 @@ export async function getSaleItems(supabase: Client, saleId: string): Promise<Sa
 export interface DailySalesSummary {
   sales: Sale[];
   salesCount: number;
+  /** Nets against returns.refund_amount for the day (see totalReturnsValue). */
   totalRevenue: number;
+  /** grossProfit - returnsProfitReversal - totalDamageLoss (see services/sales.service.ts module doc / plan). */
   totalProfit: number;
+  /** sum(returns.refund_amount) for returns whose created_at falls on this day — also already netted into totalRevenue. */
+  totalReturnsValue: number;
+  /** sum(stock_damages.loss_amount) for damages whose created_at falls on this day — also already subtracted from totalProfit. */
+  totalDamageLoss: number;
 }
 
 /**
@@ -127,18 +243,32 @@ export interface DailySalesSummary {
  * after a product's current cost_price changes later. Pre-migration rows
  * default to cost_price = 0 (unknown historical cost), which reads as
  * "full sale price counted as profit" — expected, not an error.
+ *
+ * Returns/damage net against the day they OCCURRED (returns.created_at /
+ * stock_damages.created_at), not the day of the original sale — a return
+ * can and should reduce a different day's report than the original sale's
+ * day. Revenue nets against returns; profit nets against both returns
+ * (via the original line's real margin, not refund_amount) and damage loss.
  */
 export async function getDailySalesSummary(supabase: Client, date: Date): Promise<DailySalesSummary> {
   const sales = await getDailySales(supabase, date);
+  const { dayStart, dayEnd } = dayBounds(date);
 
-  if (sales.length === 0) {
-    return { sales, salesCount: 0, totalRevenue: 0, totalProfit: 0 };
-  }
+  const [grossProfit, { returns, saleItemById }, damages] = await Promise.all([
+    computeProfitForSales(supabase, sales),
+    getReturnsInRange(supabase, dayStart, dayEnd),
+    getDamagesInRange(supabase, dayStart, dayEnd),
+  ]);
 
-  const totalProfit = await computeProfitForSales(supabase, sales);
-  const totalRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
+  const returnsProfitReversal = computeReturnsProfitReversal(returns, saleItemById);
+  const totalReturnsValue = sumRefundAmount(returns);
+  const totalDamageLoss = sumLossAmount(damages);
 
-  return { sales, salesCount: sales.length, totalRevenue, totalProfit };
+  const grossRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
+  const totalRevenue = grossRevenue - totalReturnsValue;
+  const totalProfit = grossProfit - returnsProfitReversal - totalDamageLoss;
+
+  return { sales, salesCount: sales.length, totalRevenue, totalProfit, totalReturnsValue, totalDamageLoss };
 }
 
 /** Shared helper: fetches sale_items for a set of sales and sums profit from each row's own snapshotted cost_price. */
@@ -178,36 +308,47 @@ export interface DailyReportDetails {
   date: string;
   sales: Sale[];
   salesCount: number;
+  /** Nets against returns.refund_amount for the day (see totalReturnsValue). */
   totalRevenue: number;
-  /** Sum of each sale_item's own snapshotted cost_price — see getDailySalesSummary. */
+  /** grossProfit - returnsProfitReversal - totalDamageLoss — see getDailySalesSummary. */
   totalProfit: number;
   averageInvoiceValue: number;
   highestInvoice: Sale | null;
   lowestInvoice: Sale | null;
   totalDiscountGiven: number;
   totalItemsSold: number;
+  /** sum(returns.refund_amount) for returns whose created_at falls on this day — also already netted into totalRevenue. */
+  totalReturnsValue: number;
+  /** sum(stock_damages.loss_amount) for damages whose created_at falls on this day — also already subtracted from totalProfit. */
+  totalDamageLoss: number;
   hourlyBreakdown: HourlyBucket[];
   comparisonWithYesterday: PeriodComparison;
   comparisonWithLastWeekSameDay: PeriodComparison;
 }
 
-/** Lightweight totals-only fetch (no line items) for a single day, used for period comparisons. */
+/**
+ * Lightweight totals-only fetch (no line items) for a single day, used for
+ * period comparisons. Nets revenue against that day's returns too, so
+ * yesterday/last-week comparisons stay apples-to-apples with today's net
+ * totalRevenue.
+ */
 async function getDayTotals(supabase: Client, date: Date): Promise<{ revenue: number; count: number }> {
-  const dayStart = new Date(date);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(date);
-  dayEnd.setHours(23, 59, 59, 999);
+  const { dayStart, dayEnd } = dayBounds(date);
 
-  const { data, error } = await supabase
-    .from("sales")
-    .select("total_amount")
-    .gte("created_at", dayStart.toISOString())
-    .lte("created_at", dayEnd.toISOString());
+  const [{ data, error }, { returns }] = await Promise.all([
+    supabase
+      .from("sales")
+      .select("total_amount")
+      .gte("created_at", dayStart.toISOString())
+      .lte("created_at", dayEnd.toISOString()),
+    getReturnsInRange(supabase, dayStart, dayEnd),
+  ]);
 
   if (error) throw error;
 
   const rows = data ?? [];
-  return { revenue: rows.reduce((sum, row) => sum + row.total_amount, 0), count: rows.length };
+  const grossRevenue = rows.reduce((sum, row) => sum + row.total_amount, 0);
+  return { revenue: grossRevenue - sumRefundAmount(returns), count: rows.length };
 }
 
 function buildComparison(current: { revenue: number; count: number }, previous: { revenue: number; count: number }): PeriodComparison {
@@ -230,19 +371,28 @@ export async function getDailyReportDetails(supabase: Client, date: Date): Promi
   const sales = await getDailySales(supabase, date);
   const dateKey = new Date(date);
   dateKey.setHours(0, 0, 0, 0);
+  const { dayStart, dayEnd } = dayBounds(date);
 
   const yesterday = new Date(dateKey);
   yesterday.setDate(yesterday.getDate() - 1);
   const lastWeekSameDay = new Date(dateKey);
   lastWeekSameDay.setDate(lastWeekSameDay.getDate() - 7);
 
-  const [totalProfit, yesterdayTotals, lastWeekTotals] = await Promise.all([
+  const [grossProfit, { returns, saleItemById }, damages, yesterdayTotals, lastWeekTotals] = await Promise.all([
     computeProfitForSales(supabase, sales),
+    getReturnsInRange(supabase, dayStart, dayEnd),
+    getDamagesInRange(supabase, dayStart, dayEnd),
     getDayTotals(supabase, yesterday),
     getDayTotals(supabase, lastWeekSameDay),
   ]);
 
-  const totalRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
+  const returnsProfitReversal = computeReturnsProfitReversal(returns, saleItemById);
+  const totalReturnsValue = sumRefundAmount(returns);
+  const totalDamageLoss = sumLossAmount(damages);
+
+  const grossRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
+  const totalRevenue = grossRevenue - totalReturnsValue;
+  const totalProfit = grossProfit - returnsProfitReversal - totalDamageLoss;
   const totalDiscountGiven = sales.reduce((sum, sale) => sum + sale.discount_amount, 0);
   const averageInvoiceValue = sales.length > 0 ? totalRevenue / sales.length : 0;
 
@@ -290,6 +440,8 @@ export async function getDailyReportDetails(supabase: Client, date: Date): Promi
     lowestInvoice,
     totalDiscountGiven,
     totalItemsSold,
+    totalReturnsValue,
+    totalDamageLoss,
     hourlyBreakdown,
     comparisonWithYesterday: buildComparison({ revenue: totalRevenue, count: sales.length }, yesterdayTotals),
     comparisonWithLastWeekSameDay: buildComparison({ revenue: totalRevenue, count: sales.length }, lastWeekTotals),
@@ -298,11 +450,16 @@ export async function getDailyReportDetails(supabase: Client, date: Date): Promi
 
 export interface DailySalesPoint {
   date: string;
+  /** Nets against that day's returns.refund_amount (see totalReturnsValue). */
   totalRevenue: number;
-  /** Sum of each sale_item's own snapshotted cost_price — see getDailySalesSummary. */
+  /** grossProfit - returnsProfitReversal - totalDamageLoss for this day — see getDailySalesSummary. */
   totalProfit: number;
   salesCount: number;
   averageInvoiceValue: number;
+  /** sum(returns.refund_amount) whose created_at falls on this day — also already netted into totalRevenue. */
+  totalReturnsValue: number;
+  /** sum(stock_damages.loss_amount) whose created_at falls on this day — also already subtracted from totalProfit. */
+  totalDamageLoss: number;
 }
 
 export type SalesTrendRange = { days: number } | { startDate: Date; endDate: Date };
@@ -328,16 +485,25 @@ function resolveTrendRange(range: SalesTrendRange): { startDate: Date; endDate: 
  * days with no sales so the chart doesn't skip gaps. Accepts either a rolling
  * "last N days" window or an explicit custom range, both capped at
  * MAX_RANGE_DAYS. Profit comes from each sale_item's own snapshotted cost_price.
+ *
+ * Returns/damage are bucketed by their OWN created_at day (not the original
+ * sale's day) — same "day of return/damage, not day of sale" rule as
+ * getDailySalesSummary — so a return can shift a different day's point than
+ * its original sale's point.
  */
 export async function getSalesTrend(supabase: Client, range: SalesTrendRange): Promise<DailySalesPoint[]> {
   const { startDate, endDate } = resolveTrendRange(range);
   assertRangeWithinLimit(startDate, endDate);
 
-  const { data: sales, error } = await supabase
-    .from("sales")
-    .select("id, created_at, total_amount")
-    .gte("created_at", startDate.toISOString())
-    .lte("created_at", endDate.toISOString());
+  const [{ data: sales, error }, { returns, saleItemById }, damages] = await Promise.all([
+    supabase
+      .from("sales")
+      .select("id, created_at, total_amount")
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString()),
+    getReturnsInRange(supabase, startDate, endDate),
+    getDamagesInRange(supabase, startDate, endDate),
+  ]);
 
   if (error) throw error;
 
@@ -361,28 +527,65 @@ export async function getSalesTrend(supabase: Client, range: SalesTrendRange): P
     });
   }
 
-  const byDate = new Map<string, { totalRevenue: number; totalProfit: number; salesCount: number }>();
+  interface Bucket {
+    grossRevenue: number;
+    grossProfit: number;
+    salesCount: number;
+    returnsProfitReversal: number;
+    totalReturnsValue: number;
+    totalDamageLoss: number;
+  }
+
+  const emptyBucket = (): Bucket => ({
+    grossRevenue: 0,
+    grossProfit: 0,
+    salesCount: 0,
+    returnsProfitReversal: 0,
+    totalReturnsValue: 0,
+    totalDamageLoss: 0,
+  });
+
+  const byDate = new Map<string, Bucket>();
   saleRows.forEach((sale) => {
-    const day = new Date(sale.created_at);
-    const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
-    const bucket = byDate.get(dayKey) ?? { totalRevenue: 0, totalProfit: 0, salesCount: 0 };
-    bucket.totalRevenue += sale.total_amount;
-    bucket.totalProfit += profitBySaleId.get(sale.id) ?? 0;
+    const dayKey = dayKeyOf(sale.created_at);
+    const bucket = byDate.get(dayKey) ?? emptyBucket();
+    bucket.grossRevenue += sale.total_amount;
+    bucket.grossProfit += profitBySaleId.get(sale.id) ?? 0;
     bucket.salesCount += 1;
+    byDate.set(dayKey, bucket);
+  });
+
+  returns.forEach((row) => {
+    const dayKey = dayKeyOf(row.created_at);
+    const bucket = byDate.get(dayKey) ?? emptyBucket();
+    bucket.totalReturnsValue += row.refund_amount;
+    const line = saleItemById.get(row.sale_item_id);
+    if (line) bucket.returnsProfitReversal += (line.unit_price - line.cost_price) * row.quantity;
+    byDate.set(dayKey, bucket);
+  });
+
+  damages.forEach((row) => {
+    const dayKey = dayKeyOf(row.created_at);
+    const bucket = byDate.get(dayKey) ?? emptyBucket();
+    bucket.totalDamageLoss += row.loss_amount;
     byDate.set(dayKey, bucket);
   });
 
   const points: DailySalesPoint[] = [];
   const cursor = new Date(startDate);
   while (cursor <= endDate) {
-    const dayKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
-    const bucket = byDate.get(dayKey) ?? { totalRevenue: 0, totalProfit: 0, salesCount: 0 };
+    const dayKey = dayKeyOf(cursor);
+    const bucket = byDate.get(dayKey) ?? emptyBucket();
+    const totalRevenue = bucket.grossRevenue - bucket.totalReturnsValue;
+    const totalProfit = bucket.grossProfit - bucket.returnsProfitReversal - bucket.totalDamageLoss;
     points.push({
       date: dayKey,
-      totalRevenue: bucket.totalRevenue,
-      totalProfit: bucket.totalProfit,
+      totalRevenue,
+      totalProfit,
       salesCount: bucket.salesCount,
-      averageInvoiceValue: bucket.salesCount > 0 ? bucket.totalRevenue / bucket.salesCount : 0,
+      averageInvoiceValue: bucket.salesCount > 0 ? totalRevenue / bucket.salesCount : 0,
+      totalReturnsValue: bucket.totalReturnsValue,
+      totalDamageLoss: bucket.totalDamageLoss,
     });
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -396,18 +599,28 @@ export interface ProductRankingStat {
   categoryId: string | null;
   categoryName: string;
   totalQuantity: number;
+  /** Deliberately GROSS at this per-product granularity — does not subtract returns. See totalReturnsValue. */
   totalRevenue: number;
-  /** Sum of this product's sale_items' own snapshotted cost_price — see getDailySalesSummary. */
+  /** Nets against this product's returns-profit-reversal + damage loss in range — see getDailySalesSummary. */
   totalProfit: number;
   /** Share of this product's revenue out of the grand total for the range (0-100). 0 when there are no sales at all. */
   revenueSharePercent: number;
   /** Number of distinct invoices that included this product (not summed quantity). */
   saleCount: number;
+  /** sum(returns.refund_amount) for this product's returns in range (by returns.created_at) — disclosed only, NOT subtracted from totalRevenue here (unlike the daily summary). */
+  totalReturnsValue: number;
+  /** sum(stock_damages.loss_amount) for this product in range — already subtracted from totalProfit. */
+  totalDamageLoss: number;
 }
 
 const UNCATEGORIZED_LABEL = "أخرى";
 const UNCATEGORIZED_COLOR = "#57534e";
 const UNCATEGORIZED_ICON = "ellipsis";
+
+/** Same key convention as getProductRanking's byKey map: product_id when known, else a name-based fallback for deleted products. */
+function productRankingKey(productId: string | null, productName: string): string {
+  return productId ?? `name:${productName}`;
+}
 
 /**
  * Full product ranking (no limit — caller paginates/sorts in the UI) for a
@@ -415,7 +628,12 @@ const UNCATEGORIZED_ICON = "ellipsis";
  * their sale_items), same pattern as getDailySalesSummary. Items whose
  * product was later deleted (product_id null) are grouped by their
  * snapshotted product_name and reported with categoryId: null / "أخرى".
- * Profit comes from each sale_item's own snapshotted cost_price.
+ * Profit comes from each sale_item's own snapshotted cost_price, netted
+ * against this product's returns-profit-reversal and damage loss in range
+ * (both keyed by their OWN created_at, not the original sale's day — same
+ * rule as getDailySalesSummary). Revenue stays GROSS here (deliberate
+ * asymmetry vs. the daily summary) — totalReturnsValue is disclosed as its
+ * own field instead of being netted in.
  */
 export async function getProductRanking(supabase: Client, startDate: Date, endDate: Date): Promise<ProductRankingStat[]> {
   assertRangeWithinLimit(startDate, endDate);
@@ -427,20 +645,31 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
     .lte("created_at", endDate.toISOString());
 
   if (salesError) throw salesError;
-  if (!sales || sales.length === 0) return [];
 
-  const { data: items, error: itemsError } = await supabase
-    .from("sale_items")
-    .select("sale_id, product_id, product_name, quantity, unit_price, total_price, cost_price")
-    .in(
-      "sale_id",
-      sales.map((sale) => sale.id),
-    );
+  const { returns, saleItemById } = await getReturnsInRange(supabase, startDate, endDate);
+  const damages = await getDamagesInRange(supabase, startDate, endDate);
 
-  if (itemsError) throw itemsError;
+  if ((!sales || sales.length === 0) && returns.length === 0 && damages.length === 0) return [];
+
+  let items: { sale_id: string; product_id: string | null; product_name: string; quantity: number; unit_price: number; total_price: number; cost_price: number }[] = [];
+  if (sales && sales.length > 0) {
+    const { data, error: itemsError } = await supabase
+      .from("sale_items")
+      .select("sale_id, product_id, product_name, quantity, unit_price, total_price, cost_price")
+      .in(
+        "sale_id",
+        sales.map((sale) => sale.id),
+      );
+    if (itemsError) throw itemsError;
+    items = data ?? [];
+  }
 
   const productIds = Array.from(
-    new Set((items ?? []).map((item) => item.product_id).filter((id): id is string => id !== null)),
+    new Set(
+      [...items.map((item) => item.product_id), ...returns.map((row) => row.product_id), ...damages.map((row) => row.product_id)].filter(
+        (id): id is string => id !== null,
+      ),
+    ),
   );
 
   const productInfoById = new Map<string, { categoryId: string | null }>();
@@ -472,33 +701,57 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
   }
 
   const byKey = new Map<string, Accumulator>();
-  (items ?? []).forEach((item) => {
-    const key = item.product_id ?? `name:${item.product_name}`;
+  const ensureBucket = (key: string, productId: string | null, productName: string, categoryId: string | null): Accumulator => {
+    const existing = byKey.get(key);
+    if (existing) return existing;
+    const created: Accumulator = {
+      productId,
+      productName,
+      categoryId,
+      categoryName: categoryId ? (categoryNameById.get(categoryId) ?? UNCATEGORIZED_LABEL) : UNCATEGORIZED_LABEL,
+      totalQuantity: 0,
+      totalRevenue: 0,
+      totalProfit: 0,
+      revenueSharePercent: 0,
+      saleCount: 0,
+      totalReturnsValue: 0,
+      totalDamageLoss: 0,
+      saleIds: new Set(),
+    };
+    byKey.set(key, created);
+    return created;
+  };
+
+  items.forEach((item) => {
+    const key = productRankingKey(item.product_id, item.product_name);
     const info = item.product_id ? productInfoById.get(item.product_id) : undefined;
     const categoryId = info?.categoryId ?? null;
-    const cost = item.cost_price;
-    const profit = (item.unit_price - cost) * item.quantity;
+    const profit = (item.unit_price - item.cost_price) * item.quantity;
 
-    const existing = byKey.get(key);
-    if (existing) {
-      existing.totalQuantity += item.quantity;
-      existing.totalRevenue += item.total_price;
-      existing.totalProfit += profit;
-      existing.saleIds.add(item.sale_id);
-    } else {
-      byKey.set(key, {
-        productId: item.product_id,
-        productName: item.product_name,
-        categoryId,
-        categoryName: categoryId ? (categoryNameById.get(categoryId) ?? UNCATEGORIZED_LABEL) : UNCATEGORIZED_LABEL,
-        totalQuantity: item.quantity,
-        totalRevenue: item.total_price,
-        totalProfit: profit,
-        revenueSharePercent: 0,
-        saleCount: 0,
-        saleIds: new Set([item.sale_id]),
-      });
-    }
+    const bucket = ensureBucket(key, item.product_id, item.product_name, categoryId);
+    bucket.totalQuantity += item.quantity;
+    bucket.totalRevenue += item.total_price;
+    bucket.totalProfit += profit;
+    bucket.saleIds.add(item.sale_id);
+  });
+
+  returns.forEach((row) => {
+    const key = productRankingKey(row.product_id, row.product_name);
+    const info = row.product_id ? productInfoById.get(row.product_id) : undefined;
+    const categoryId = info?.categoryId ?? null;
+    const bucket = ensureBucket(key, row.product_id, row.product_name, categoryId);
+    bucket.totalReturnsValue += row.refund_amount;
+    const line = saleItemById.get(row.sale_item_id);
+    if (line) bucket.totalProfit -= (line.unit_price - line.cost_price) * row.quantity;
+  });
+
+  damages.forEach((row) => {
+    const key = productRankingKey(row.product_id, row.product_name);
+    const info = row.product_id ? productInfoById.get(row.product_id) : undefined;
+    const categoryId = info?.categoryId ?? null;
+    const bucket = ensureBucket(key, row.product_id, row.product_name, categoryId);
+    bucket.totalDamageLoss += row.loss_amount;
+    bucket.totalProfit -= row.loss_amount;
   });
 
   const stats = Array.from(byKey.values());
@@ -515,6 +768,8 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
       totalProfit: stat.totalProfit,
       revenueSharePercent: grandTotalRevenue > 0 ? (stat.totalRevenue / grandTotalRevenue) * 100 : 0,
       saleCount: stat.saleIds.size,
+      totalReturnsValue: stat.totalReturnsValue,
+      totalDamageLoss: stat.totalDamageLoss,
     }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
 }
@@ -525,13 +780,18 @@ export interface CategoryRankingStat {
   categoryColor: string;
   categoryIcon: string;
   totalQuantity: number;
+  /** Deliberately GROSS at this per-category granularity — does not subtract returns. See totalReturnsValue. */
   totalRevenue: number;
-  /** Sum of this category's sale_items' own snapshotted cost_price — see getDailySalesSummary. */
+  /** Nets against this category's returns-profit-reversal + damage loss in range — see getDailySalesSummary. */
   totalProfit: number;
   /** Share of this category's revenue out of the grand total for the range (0-100). 0 when there are no sales at all. */
   revenueSharePercent: number;
   /** Number of distinct invoices that included a product from this category. */
   saleCount: number;
+  /** sum(returns.refund_amount) for this category's returns in range (by returns.created_at) — disclosed only, NOT subtracted from totalRevenue here (unlike the daily summary). */
+  totalReturnsValue: number;
+  /** sum(stock_damages.loss_amount) for this category in range — already subtracted from totalProfit. */
+  totalDamageLoss: number;
 }
 
 /**
@@ -540,7 +800,11 @@ export interface CategoryRankingStat {
  * getProductRanking, additionally joined (client-side) against products →
  * categories to bucket revenue per category. Items whose product or category
  * can no longer be resolved (deleted / never assigned) are bucketed under
- * "أخرى". Profit comes from each sale_item's own snapshotted cost_price.
+ * "أخرى". Profit comes from each sale_item's own snapshotted cost_price,
+ * netted against this category's returns-profit-reversal and damage loss in
+ * range (both keyed by their OWN created_at, not the original sale's day).
+ * Revenue stays GROSS here (deliberate asymmetry vs. the daily summary) —
+ * totalReturnsValue is disclosed as its own field instead of being netted in.
  */
 export async function getCategoryRanking(supabase: Client, startDate: Date, endDate: Date): Promise<CategoryRankingStat[]> {
   assertRangeWithinLimit(startDate, endDate);
@@ -552,20 +816,31 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
     .lte("created_at", endDate.toISOString());
 
   if (salesError) throw salesError;
-  if (!sales || sales.length === 0) return [];
 
-  const { data: items, error: itemsError } = await supabase
-    .from("sale_items")
-    .select("sale_id, product_id, quantity, unit_price, total_price, cost_price")
-    .in(
-      "sale_id",
-      sales.map((sale) => sale.id),
-    );
+  const { returns, saleItemById } = await getReturnsInRange(supabase, startDate, endDate);
+  const damages = await getDamagesInRange(supabase, startDate, endDate);
 
-  if (itemsError) throw itemsError;
+  if ((!sales || sales.length === 0) && returns.length === 0 && damages.length === 0) return [];
+
+  let items: { sale_id: string; product_id: string | null; quantity: number; unit_price: number; total_price: number; cost_price: number }[] = [];
+  if (sales && sales.length > 0) {
+    const { data, error: itemsError } = await supabase
+      .from("sale_items")
+      .select("sale_id, product_id, quantity, unit_price, total_price, cost_price")
+      .in(
+        "sale_id",
+        sales.map((sale) => sale.id),
+      );
+    if (itemsError) throw itemsError;
+    items = data ?? [];
+  }
 
   const productIds = Array.from(
-    new Set((items ?? []).map((item) => item.product_id).filter((id): id is string => id !== null)),
+    new Set(
+      [...items.map((item) => item.product_id), ...returns.map((row) => row.product_id), ...damages.map((row) => row.product_id)].filter(
+        (id): id is string => id !== null,
+      ),
+    ),
   );
 
   const productInfoById = new Map<string, { categoryId: string | null }>();
@@ -599,34 +874,56 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
   }
 
   const byKey = new Map<string, Accumulator>();
-  (items ?? []).forEach((item) => {
+  const ensureBucket = (categoryId: string | null): Accumulator => {
+    const key = categoryId ?? "__uncategorized__";
+    const existing = byKey.get(key);
+    if (existing) return existing;
+    const category = categoryId ? categoryById.get(categoryId) : undefined;
+    const created: Accumulator = {
+      categoryId,
+      categoryName: category?.name ?? UNCATEGORIZED_LABEL,
+      categoryColor: category?.color ?? UNCATEGORIZED_COLOR,
+      categoryIcon: category?.icon ?? UNCATEGORIZED_ICON,
+      totalQuantity: 0,
+      totalRevenue: 0,
+      totalProfit: 0,
+      revenueSharePercent: 0,
+      saleCount: 0,
+      totalReturnsValue: 0,
+      totalDamageLoss: 0,
+      saleIds: new Set(),
+    };
+    byKey.set(key, created);
+    return created;
+  };
+
+  items.forEach((item) => {
     const info = item.product_id ? productInfoById.get(item.product_id) : undefined;
     const categoryId = info?.categoryId ?? null;
-    const category = categoryId ? categoryById.get(categoryId) : undefined;
-    const cost = item.cost_price;
-    const profit = (item.unit_price - cost) * item.quantity;
-    const key = categoryId ?? "__uncategorized__";
+    const profit = (item.unit_price - item.cost_price) * item.quantity;
 
-    const existing = byKey.get(key);
-    if (existing) {
-      existing.totalQuantity += item.quantity;
-      existing.totalRevenue += item.total_price;
-      existing.totalProfit += profit;
-      existing.saleIds.add(item.sale_id);
-    } else {
-      byKey.set(key, {
-        categoryId,
-        categoryName: category?.name ?? UNCATEGORIZED_LABEL,
-        categoryColor: category?.color ?? UNCATEGORIZED_COLOR,
-        categoryIcon: category?.icon ?? UNCATEGORIZED_ICON,
-        totalQuantity: item.quantity,
-        totalRevenue: item.total_price,
-        totalProfit: profit,
-        revenueSharePercent: 0,
-        saleCount: 0,
-        saleIds: new Set([item.sale_id]),
-      });
-    }
+    const bucket = ensureBucket(categoryId);
+    bucket.totalQuantity += item.quantity;
+    bucket.totalRevenue += item.total_price;
+    bucket.totalProfit += profit;
+    bucket.saleIds.add(item.sale_id);
+  });
+
+  returns.forEach((row) => {
+    const info = row.product_id ? productInfoById.get(row.product_id) : undefined;
+    const categoryId = info?.categoryId ?? null;
+    const bucket = ensureBucket(categoryId);
+    bucket.totalReturnsValue += row.refund_amount;
+    const line = saleItemById.get(row.sale_item_id);
+    if (line) bucket.totalProfit -= (line.unit_price - line.cost_price) * row.quantity;
+  });
+
+  damages.forEach((row) => {
+    const info = row.product_id ? productInfoById.get(row.product_id) : undefined;
+    const categoryId = info?.categoryId ?? null;
+    const bucket = ensureBucket(categoryId);
+    bucket.totalDamageLoss += row.loss_amount;
+    bucket.totalProfit -= row.loss_amount;
   });
 
   const stats = Array.from(byKey.values());
@@ -643,6 +940,8 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
       totalProfit: stat.totalProfit,
       revenueSharePercent: grandTotalRevenue > 0 ? (stat.totalRevenue / grandTotalRevenue) * 100 : 0,
       saleCount: stat.saleIds.size,
+      totalReturnsValue: stat.totalReturnsValue,
+      totalDamageLoss: stat.totalDamageLoss,
     }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
 }

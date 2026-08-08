@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PackagePlus } from "lucide-react";
+import { PackagePlus, PackageX } from "lucide-react";
 import type { Product } from "@/types/product";
 import { isLowStock } from "@/types/product";
 import { formatCurrency } from "@/lib/utils";
@@ -16,9 +16,10 @@ interface StockTableProps {
   onEdit: (product: Product) => void;
   onDelete: (product: Product) => void;
   onReceiveStock: (product: Product) => void;
+  onDamageStock: (product: Product) => void;
 }
 
-export function StockTable({ products, onEdit, onDelete, onReceiveStock }: StockTableProps) {
+export function StockTable({ products, onEdit, onDelete, onReceiveStock, onDamageStock }: StockTableProps) {
   const { role } = useAuth();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
@@ -63,6 +64,17 @@ export function StockTable({ products, onEdit, onDelete, onReceiveStock }: Stock
                   >
                     <PackagePlus className="h-4 w-4" />
                     استلام
+                  </button>
+                ) : null}
+                {isAdminRole(role) ? (
+                  <button
+                    type="button"
+                    onClick={() => onDamageStock(product)}
+                    aria-label="تسجيل تلف"
+                    className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-orange-700 hover:bg-orange-50"
+                  >
+                    <PackageX className="h-4 w-4" />
+                    تالف
                   </button>
                 ) : null}
                 <button

@@ -6,6 +6,7 @@ import { BarcodeScanner } from "@/components/features/pos/BarcodeScanner";
 import { CartGrid } from "@/components/features/pos/CartGrid";
 import { ReceiptPrinter } from "@/components/features/pos/ReceiptPrinter";
 import { OfflineBanner } from "@/components/features/pos/OfflineBanner";
+import { ReturnLookup } from "@/components/features/pos/ReturnLookup";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -26,6 +27,7 @@ export default function POSPage() {
 
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [paidAmount, setPaidAmount] = useState("");
+  const [isReturnsOpen, setIsReturnsOpen] = useState(false);
 
   function openCheckout() {
     if (items.length === 0) return;
@@ -45,6 +47,9 @@ export default function POSPage() {
     <div className="-m-3 flex h-[calc(100vh-4rem-4.25rem)] flex-col overflow-hidden bg-gray-50 lg:-m-6 lg:h-[calc(100vh-4rem)]">
       <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
         <h1 className="text-lg font-bold text-brand-700">شاشة الكاشير</h1>
+        <Button type="button" variant="secondary" size="sm" onClick={() => setIsReturnsOpen(true)}>
+          المرتجعات
+        </Button>
       </header>
 
       <div className="px-4 pt-4">
@@ -113,6 +118,10 @@ export default function POSPage() {
 
       <Modal open={lastReceipt !== null} onClose={dismissReceipt} title="تمت عملية البيع">
         {lastReceipt ? <ReceiptPrinter receipt={lastReceipt} onClose={dismissReceipt} /> : null}
+      </Modal>
+
+      <Modal open={isReturnsOpen} onClose={() => setIsReturnsOpen(false)} title="مرتجعات اليوم">
+        <ReturnLookup />
       </Modal>
     </div>
   );
