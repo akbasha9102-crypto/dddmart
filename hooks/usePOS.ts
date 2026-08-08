@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { decrementStock, incrementStock, resolveBarcode } from "@/services/products.service";
 import { createSale } from "@/services/sales.service";
+import { holdSale, resumeHeldSale } from "@/services/heldSales.service";
 import { useCart } from "@/hooks/useCart";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { findCartItemByBarcode, productToCartItem, productUnitToCartItem, calculateTotals } from "@/types/pos";
@@ -266,6 +267,32 @@ export function usePOS({ cashierId }: UsePOSOptions) {
 
   const dismissReceipt = useCallback(() => setLastReceipt(null), []);
 
+  const holdCurrentSale = useCallback(
+    async (note: string | null) => {
+      const supabase = createClient();
+      await holdSale(supabase, {
+        cashierId,
+        items: cart.items,
+        discountAmount: cart.discountAmount,
+        note,
+      });
+      cart.clear();
+    },
+    [cart, cashierId],
+  );
+
+  const resumeSale = useCallback(
+    async (id: string) => {
+      if (cart.items.length > 0) {
+        throw new Error("أفرغ أو علّق السلة الحالية أولاً قبل استرجاع فاتورة معلقة");
+      }
+      const supabase = createClient();
+      const { items, discountAmount } = await resumeHeldSale(supabase, id);
+      cart.loadItems(items, discountAmount);
+    },
+    [cart],
+  );
+
   return {
     items: cart.items,
     totals: cart.totals,
@@ -283,6 +310,8 @@ export function usePOS({ cashierId }: UsePOSOptions) {
     lastReceipt,
     dismissReceipt,
     isOnline,
+    holdCurrentSale,
+    resumeSale,
   };
 }
 

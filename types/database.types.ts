@@ -406,6 +406,41 @@ export interface Database {
           },
         ];
       };
+      held_sales: {
+        Row: {
+          id: string;
+          cashier_id: string | null;
+          items: Record<string, unknown>[];
+          discount_amount: number;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          cashier_id?: string | null;
+          items: Record<string, unknown>[];
+          discount_amount?: number;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          cashier_id?: string | null;
+          items?: Record<string, unknown>[];
+          discount_amount?: number;
+          note?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "held_sales_cashier_id_fkey";
+            columns: ["cashier_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       operations_log: {
         Row: {
           id: string;

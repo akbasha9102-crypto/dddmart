@@ -39,6 +39,11 @@ export function useCart() {
     setDiscountAmount(0);
   }, []);
 
+  const loadItems = useCallback((newItems: CartItem[], newDiscountAmount: number) => {
+    setItems(newItems);
+    setDiscountAmount(newDiscountAmount);
+  }, []);
+
   const totals = useMemo(() => calculateTotals(items, discountAmount), [items, discountAmount]);
 
   return {
@@ -50,5 +55,6 @@ export function useCart() {
     updateQuantity,
     removeItem,
     clear,
+    loadItems,
   };
 }
