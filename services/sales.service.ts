@@ -145,7 +145,8 @@ function dayKeyOf(value: string | Date): string {
 }
 
 /**
- * Persists a completed cash sale: the invoice header and its line items.
+ * Persists a completed sale (cash or credit): the invoice header and its
+ * line items, plus a customer_transactions ledger row for credit sales.
  * Stock is no longer touched here — it's decremented atomically at
  * add-to-cart time instead (see services/products.service.ts#decrementStock
  * / hooks/usePOS.ts#addProductToCart). Not wrapped in a DB transaction (no
@@ -156,14 +157,31 @@ function dayKeyOf(value: string | Date): string {
  * (see lib/offline/syncManager.ts) sync under the same identity its receipt
  * already showed the cashier. Both are optional and unused by the normal
  * online checkout path, which keeps generating them here as before.
+ *
+ * Division of responsibility for CompletedSale.customerName: createSale only
+ * has payload.customerId (an id) in scope, not the customer's display name,
+ * so it never sets customerName — the caller (hooks/usePOS.ts), which already
+ * has the selected CustomerWithBalance in hand, populates it for receipt
+ * printing.
  */
 export async function createSale(supabase: Client, payload: CheckoutPayload): Promise<CompletedSale> {
   if (payload.items.length === 0) {
     throw new Error("لا يمكن إتمام عملية بيع فارغة");
   }
 
+  const paymentMethod = payload.paymentMethod ?? "cash";
+  if (paymentMethod === "credit" && !payload.customerId) {
+    throw new Error("يجب اختيار زبون لإتمام بيع بالآجل");
+  }
+  // Narrowed once here so both the sales insert and the customer_transactions
+  // insert below can use a plain string (payload.customerId's static type is
+  // string | null | undefined, but the guard above already ensures it's set
+  // whenever paymentMethod === "credit").
+  const customerId = payload.customerId as string | null;
+
   const { subtotal, discountAmount, totalAmount } = calculateTotals(payload.items, payload.discountAmount);
-  const changeAmount = Math.max(payload.paidAmount - totalAmount, 0);
+  const paidAmount = paymentMethod === "credit" ? 0 : payload.paidAmount;
+  const changeAmount = paymentMethod === "credit" ? 0 : Math.max(payload.paidAmount - totalAmount, 0);
 
   const { data: sale, error: saleError } = await supabase
     .from("sales")
@@ -174,9 +192,10 @@ export async function createSale(supabase: Client, payload: CheckoutPayload): Pr
       subtotal,
       discount_amount: discountAmount,
       total_amount: totalAmount,
-      paid_amount: payload.paidAmount,
+      paid_amount: paidAmount,
       change_amount: changeAmount,
-      payment_method: "cash",
+      payment_method: paymentMethod,
+      customer_id: paymentMethod === "credit" ? customerId : null,
     })
     .select()
     .single();
@@ -188,6 +207,17 @@ export async function createSale(supabase: Client, payload: CheckoutPayload): Pr
   const { data: items, error: itemsError } = await supabase.from("sale_items").insert(saleItems).select();
 
   if (itemsError) throw itemsError;
+
+  if (paymentMethod === "credit" && customerId) {
+    const { error: transactionError } = await supabase.from("customer_transactions").insert({
+      customer_id: customerId,
+      type: "sale",
+      amount: totalAmount,
+      sale_id: sale.id,
+    });
+
+    if (transactionError) throw transactionError;
+  }
 
   await logOperation(supabase, {
     userId: payload.cashierId,

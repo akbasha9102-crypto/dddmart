@@ -6,8 +6,9 @@ describe("isSettingsPath", () => {
     expect(isSettingsPath("/settings")).toBe(true);
   });
 
-  it("returns true for sales, archive, and employees pages", () => {
+  it("returns true for sales, customers, archive, and employees pages", () => {
     expect(isSettingsPath("/sales")).toBe(true);
+    expect(isSettingsPath("/customers")).toBe(true);
     expect(isSettingsPath("/archive")).toBe(true);
     expect(isSettingsPath("/employees")).toBe(true);
   });
@@ -25,16 +26,16 @@ describe("isSettingsPath", () => {
 describe("visibleSettingsLinks", () => {
   it("includes admin-only links for an admin role", () => {
     const hrefs = visibleSettingsLinks("admin").map((link) => link.href);
-    expect(hrefs).toEqual(["/sales", "/archive", "/employees"]);
+    expect(hrefs).toEqual(["/sales", "/customers", "/archive", "/employees"]);
   });
 
   it("excludes admin-only links for a cashier role", () => {
     const hrefs = visibleSettingsLinks("cashier").map((link) => link.href);
-    expect(hrefs).toEqual(["/archive"]);
+    expect(hrefs).toEqual(["/customers", "/archive"]);
   });
 
   it("excludes admin-only links for a null role", () => {
     const hrefs = visibleSettingsLinks(null).map((link) => link.href);
-    expect(hrefs).toEqual(["/archive"]);
+    expect(hrefs).toEqual(["/customers", "/archive"]);
   });
 });

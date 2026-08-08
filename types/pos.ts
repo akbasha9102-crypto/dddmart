@@ -1,4 +1,4 @@
-import type { Database } from "./database.types";
+import type { Database, PaymentMethod } from "./database.types";
 import type { Product, ProductUnit } from "./product";
 
 export type Sale = Database["public"]["Tables"]["sales"]["Row"];
@@ -38,12 +38,18 @@ export interface CheckoutPayload {
   id?: string;
   /** Set when replaying a previously-queued offline sale so it keeps the invoice number its receipt already showed. Omitted (and auto-generated) for a normal online checkout. */
   invoiceNumber?: string;
+  /** Defaults to "cash" when omitted, so every existing caller keeps working unchanged. */
+  paymentMethod?: PaymentMethod;
+  /** Required (by createSale) when paymentMethod is "credit". */
+  customerId?: string | null;
 }
 
 export interface CompletedSale {
   sale: Sale;
   items: SaleItem[];
   changeAmount: number;
+  /** Set only for credit sales, for receipt printing — createSale only has customerId in scope, so this is populated by the caller (hooks/usePOS.ts). */
+  customerName?: string;
 }
 
 export function findCartItemByBarcode(items: CartItem[], barcode: string): CartItem | undefined {

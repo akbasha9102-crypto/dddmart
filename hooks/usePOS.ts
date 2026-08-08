@@ -11,6 +11,7 @@ import { findCartItemByBarcode, productToCartItem, productUnitToCartItem, calcul
 import type { CompletedSale } from "@/types/pos";
 import type { Product } from "@/types/product";
 import type { ProductUnit } from "@/types/product";
+import type { PaymentMethod } from "@/types/database.types";
 import { toBaseUnits } from "@/lib/units";
 import { generateInvoiceNumber } from "@/lib/utils";
 import { addPendingSale } from "@/lib/offline/outbox";
@@ -187,7 +188,22 @@ export function usePOS({ cashierId }: UsePOSOptions) {
   }, [cart, isOnline]);
 
   const checkout = useCallback(
-    async (paidAmount: number): Promise<CompletedSale> => {
+    async (options: {
+      paidAmount: number;
+      paymentMethod?: PaymentMethod;
+      customerId?: string | null;
+      customerName?: string;
+    }): Promise<CompletedSale> => {
+      const { paidAmount, paymentMethod = "cash", customerId = null, customerName } = options;
+
+      // A credit sale needs a live customer-balance read for the over-limit
+      // warning, which is impossible offline (no customer cache like
+      // lib/offline/productCache.ts) — simply disallowed while offline. The
+      // POS UI also disables the "بالآجل" toggle when offline.
+      if (!isOnline && paymentMethod === "credit") {
+        throw new Error("البيع بالآجل غير متاح في وضع عدم الاتصال");
+      }
+
       setIsCheckingOut(true);
       try {
         if (!isOnline) {
@@ -224,7 +240,10 @@ export function usePOS({ cashierId }: UsePOSOptions) {
               total_amount: totalAmount,
               paid_amount: paidAmount,
               change_amount: changeAmount,
+              // Always "cash" here — the guard above throws before this branch
+              // is reached for a credit sale while offline.
               payment_method: "cash",
+              customer_id: null,
               created_at: now,
             },
             items: cart.items.map((item, index) => ({
@@ -254,10 +273,16 @@ export function usePOS({ cashierId }: UsePOSOptions) {
           discountAmount: cart.discountAmount,
           paidAmount,
           cashierId,
+          paymentMethod,
+          customerId,
         });
-        setLastReceipt(result);
+        const resultWithCustomerName: CompletedSale = {
+          ...result,
+          customerName: paymentMethod === "credit" ? customerName : undefined,
+        };
+        setLastReceipt(resultWithCustomerName);
         cart.clear();
-        return result;
+        return resultWithCustomerName;
       } finally {
         setIsCheckingOut(false);
       }

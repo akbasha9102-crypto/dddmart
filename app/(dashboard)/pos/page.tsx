@@ -8,14 +8,23 @@ import { ReceiptPrinter } from "@/components/features/pos/ReceiptPrinter";
 import { OfflineBanner } from "@/components/features/pos/OfflineBanner";
 import { ReturnLookup } from "@/components/features/pos/ReturnLookup";
 import { HeldSalesList } from "@/components/features/pos/HeldSalesList";
+import { CustomerPicker } from "@/components/features/pos/CustomerPicker";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { formatCurrency, cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { listHeldSales } from "@/services/heldSales.service";
+import { getCustomerBalance } from "@/services/customers.service";
+import type { CustomerWithBalance } from "@/types/customer";
+import type { PaymentMethod } from "@/types/database.types";
 
 type POSView = "cashier" | "held" | "returns";
+
+const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
+  { value: "cash", label: "نقد" },
+  { value: "credit", label: "بالآجل" },
+];
 
 const POS_VIEWS: { value: POSView; label: string }[] = [
   { value: "cashier", label: "الكاشير" },
@@ -35,6 +44,7 @@ export default function POSPage() {
     lastReceipt,
     dismissReceipt,
     holdCurrentSale,
+    isOnline,
   } = usePOSContext();
 
   const [activeView, setActiveView] = useState<POSView>("cashier");
@@ -44,6 +54,10 @@ export default function POSPage() {
   const [isHoldNoteOpen, setIsHoldNoteOpen] = useState(false);
   const [holdNote, setHoldNote] = useState("");
   const [isHolding, setIsHolding] = useState(false);
+
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithBalance | null>(null);
+  const [overLimitWarning, setOverLimitWarning] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -70,11 +84,43 @@ export default function POSPage() {
   function openCheckout() {
     if (items.length === 0) return;
     setPaidAmount(String(totals.totalAmount));
+    setPaymentMethod("cash");
+    setSelectedCustomer(null);
+    setOverLimitWarning(null);
     setIsCheckoutOpen(true);
   }
 
+  async function handleSelectCustomer(customer: CustomerWithBalance | null) {
+    setSelectedCustomer(customer);
+    setOverLimitWarning(null);
+
+    if (!customer) return;
+
+    // Non-blocking warning only (confirmed store policy) — the cashier can
+    // still complete the sale even when this pushes the customer over their
+    // credit limit.
+    const supabase = createClient();
+    const liveBalance = await getCustomerBalance(supabase, customer.id);
+    const projectedBalance = liveBalance + totals.totalAmount;
+    if (customer.credit_limit > 0 && projectedBalance > customer.credit_limit) {
+      setOverLimitWarning(
+        `تنبيه: هذه العملية ستتجاوز حد الائتمان المسموح به (${formatCurrency(customer.credit_limit)}) — الرصيد المتوقع: ${formatCurrency(projectedBalance)}`,
+      );
+    }
+  }
+
   async function handleConfirmPayment() {
-    await checkout(Number(paidAmount) || 0);
+    if (paymentMethod === "credit") {
+      if (!selectedCustomer) return;
+      await checkout({
+        paidAmount: 0,
+        paymentMethod: "credit",
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+      });
+    } else {
+      await checkout({ paidAmount: Number(paidAmount) || 0, paymentMethod: "cash" });
+    }
     setIsCheckoutOpen(false);
   }
 
@@ -184,19 +230,58 @@ export default function POSPage() {
             <span>الإجمالي المطلوب</span>
             <span className="font-bold">{formatCurrency(totals.totalAmount)}</span>
           </div>
-          <Input
-            type="number"
-            label="المبلغ المستلم"
-            autoFocus
-            value={paidAmount}
-            onChange={(event) => setPaidAmount(event.target.value)}
-            min={0}
-          />
-          <div className="flex justify-between text-base">
-            <span className="text-gray-500">الباقي</span>
-            <span className="font-semibold">{formatCurrency(change)}</span>
+
+          <div role="tablist" className="flex items-center gap-1 rounded-full bg-gray-100 p-1">
+            {PAYMENT_METHODS.map((method) => {
+              const disabled = method.value === "credit" && !isOnline;
+              return (
+                <button
+                  key={method.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={paymentMethod === method.value}
+                  disabled={disabled}
+                  onClick={() => setPaymentMethod(method.value)}
+                  className={cn(
+                    "flex-1 rounded-full px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                    paymentMethod === method.value ? "bg-white text-brand-700 shadow-sm" : "text-gray-500",
+                  )}
+                >
+                  {method.label}
+                </button>
+              );
+            })}
           </div>
-          <Button size="lg" disabled={isCheckingOut || paidNumber < totals.totalAmount} onClick={handleConfirmPayment}>
+
+          {paymentMethod === "credit" ? (
+            <>
+              <CustomerPicker value={selectedCustomer} onChange={handleSelectCustomer} />
+              {overLimitWarning ? (
+                <div className="rounded-lg bg-amber-100 px-4 py-2 text-sm text-amber-800">{overLimitWarning}</div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Input
+                type="number"
+                label="المبلغ المستلم"
+                autoFocus
+                value={paidAmount}
+                onChange={(event) => setPaidAmount(event.target.value)}
+                min={0}
+              />
+              <div className="flex justify-between text-base">
+                <span className="text-gray-500">الباقي</span>
+                <span className="font-semibold">{formatCurrency(change)}</span>
+              </div>
+            </>
+          )}
+
+          <Button
+            size="lg"
+            disabled={isCheckingOut || (paymentMethod === "credit" ? !selectedCustomer : paidNumber < totals.totalAmount)}
+            onClick={handleConfirmPayment}
+          >
             {isCheckingOut ? "جارٍ الحفظ..." : "تأكيد الدفع"}
           </Button>
         </div>

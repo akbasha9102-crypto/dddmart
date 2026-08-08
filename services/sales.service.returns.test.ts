@@ -85,6 +85,7 @@ const SALE: Sale = {
   paid_amount: 100,
   change_amount: 0,
   payment_method: "cash",
+  customer_id: null,
   created_at: new Date().toISOString(),
 };
 

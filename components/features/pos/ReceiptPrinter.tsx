@@ -11,14 +11,15 @@ interface ReceiptPrinterProps {
 
 /** 80mm-wide thermal receipt. Only #receipt is visible when printing — see app/globals.css. */
 export function ReceiptPrinter({ receipt, onClose }: ReceiptPrinterProps) {
-  const { sale, items, changeAmount } = receipt;
+  const { sale, items, changeAmount, customerName } = receipt;
+  const isCredit = sale.payment_method === "credit";
 
   return (
     <div className="flex flex-col items-center gap-4">
       <div id="receipt" className="w-[80mm] max-w-full bg-white p-3 font-mono text-xs text-black">
         <div className="text-center">
           <p className="text-base font-bold">DDD Mart</p>
-          <p>فاتورة بيع نقدي</p>
+          <p>{isCredit ? "فاتورة بيع بالآجل" : "فاتورة بيع نقدي"}</p>
         </div>
         <hr className="my-2 border-dashed border-black" />
         <p>رقم الفاتورة: {sale.invoice_number}</p>
@@ -53,14 +54,26 @@ export function ReceiptPrinter({ receipt, onClose }: ReceiptPrinterProps) {
           <span>الإجمالي</span>
           <span>{formatCurrency(sale.total_amount)}</span>
         </div>
-        <div className="flex justify-between">
-          <span>المدفوع</span>
-          <span>{formatCurrency(sale.paid_amount)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>الباقي</span>
-          <span>{formatCurrency(changeAmount)}</span>
-        </div>
+        {isCredit ? (
+          <>
+            <div className="flex justify-between">
+              <span>الزبون</span>
+              <span>{customerName ?? "—"}</span>
+            </div>
+            <p className="mt-1 text-center font-bold">بيع بالآجل — لم يتم الدفع نقداً</p>
+          </>
+        ) : (
+          <>
+            <div className="flex justify-between">
+              <span>المدفوع</span>
+              <span>{formatCurrency(sale.paid_amount)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>الباقي</span>
+              <span>{formatCurrency(changeAmount)}</span>
+            </div>
+          </>
+        )}
         <hr className="my-2 border-dashed border-black" />
         <p className="text-center">شكراً لزيارتكم</p>
       </div>

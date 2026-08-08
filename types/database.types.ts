@@ -4,7 +4,7 @@
  * manually until `supabase gen types typescript` is wired to a live project.
  */
 
-export type PaymentMethod = "cash";
+export type PaymentMethod = "cash" | "credit";
 export type UserRole = "admin" | "cashier";
 export type OperationActionType =
   | "sale_created"
@@ -17,8 +17,13 @@ export type OperationActionType =
   | "stock_adjusted"
   | "stock_received"
   | "return_created"
-  | "damage_recorded";
-export type OperationEntityType = "product" | "category" | "sale" | "stock";
+  | "damage_recorded"
+  | "customer_created"
+  | "customer_updated"
+  | "customer_archived"
+  | "customer_payment_recorded";
+export type OperationEntityType = "product" | "category" | "sale" | "stock" | "customer";
+export type CustomerTransactionType = "sale" | "payment";
 
 export interface Database {
   public: {
@@ -141,6 +146,7 @@ export interface Database {
           paid_amount: number;
           change_amount: number;
           payment_method: PaymentMethod;
+          customer_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -153,6 +159,7 @@ export interface Database {
           paid_amount: number;
           change_amount?: number;
           payment_method?: PaymentMethod;
+          customer_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -165,6 +172,7 @@ export interface Database {
           paid_amount?: number;
           change_amount?: number;
           payment_method?: PaymentMethod;
+          customer_id?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -173,6 +181,13 @@ export interface Database {
             columns: ["cashier_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "sales_customer_id_fkey";
+            columns: ["customer_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
             referencedColumns: ["id"];
           },
         ];
@@ -441,6 +456,81 @@ export interface Database {
           },
         ];
       };
+      customers: {
+        Row: {
+          id: string;
+          name: string;
+          phone: string | null;
+          credit_limit: number;
+          notes: string | null;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          phone?: string | null;
+          credit_limit?: number;
+          notes?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          phone?: string | null;
+          credit_limit?: number;
+          notes?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      customer_transactions: {
+        Row: {
+          id: string;
+          customer_id: string;
+          type: CustomerTransactionType;
+          amount: number;
+          sale_id: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_id: string;
+          type: CustomerTransactionType;
+          amount: number;
+          sale_id?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          customer_id?: string;
+          type?: CustomerTransactionType;
+          amount?: number;
+          sale_id?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "customer_transactions_customer_id_fkey";
+            columns: ["customer_id"];
+            isOneToOne: false;
+            referencedRelation: "customers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "customer_transactions_sale_id_fkey";
+            columns: ["sale_id"];
+            isOneToOne: false;
+            referencedRelation: "sales";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       operations_log: {
         Row: {
           id: string;
@@ -483,7 +573,15 @@ export interface Database {
         ];
       };
     };
-    Views: Record<string, never>;
+    Views: {
+      customer_balances: {
+        Row: {
+          customer_id: string;
+          balance: number;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
       adjust_product_stock: {
         Args: { p_product_id: string; p_delta: number };
