@@ -15,56 +15,56 @@ export function CartGrid() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="flex flex-col gap-2">
-        {items.map((item) => (
-          <div key={item.barcode} className="rounded-lg border border-gray-100 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <span className="min-w-0 flex-1 truncate font-medium text-gray-900">
+    <div className="flex flex-col gap-2">
+      {items.map((item) => (
+        <div key={item.barcode} className="flex flex-col gap-2 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate text-[15px] font-semibold text-gray-900">
                 {item.name}
                 {item.unitName ? (
                   <span className="mr-1 text-xs font-normal text-gray-500">({item.unitName})</span>
                 ) : null}
               </span>
-              <span className="shrink-0 text-sm text-gray-600">{formatCurrency(item.unitPrice)}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => updateQuantity(item.barcode, item.quantity - 1)}
-                  className="flex h-11 w-11 items-center justify-center rounded-md bg-gray-100 text-lg font-bold hover:bg-gray-200"
-                  aria-label="إنقاص الكمية"
-                >
-                  −
-                </button>
-                <span className="w-8 text-center font-semibold">{item.quantity}</span>
-                <button
-                  type="button"
-                  onClick={() => updateQuantity(item.barcode, item.quantity + 1)}
-                  className="flex h-11 w-11 items-center justify-center rounded-md bg-gray-100 text-lg font-bold hover:bg-gray-200"
-                  aria-label="زيادة الكمية"
-                >
-                  +
-                </button>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="font-semibold text-gray-900">
-                  {formatCurrency(item.unitPrice * item.quantity)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => removeItem(item.barcode)}
-                  className="text-sm text-red-600 hover:underline"
-                  aria-label="حذف المنتج"
-                >
-                  حذف
-                </button>
-              </div>
+              <span className="text-sm text-gray-500">{formatCurrency(item.unitPrice)} / وحدة</span>
             </div>
           </div>
-        ))}
-      </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => updateQuantity(item.barcode, item.quantity - 1)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white text-lg font-bold text-gray-700 shadow-sm hover:bg-gray-100"
+                aria-label="إنقاص الكمية"
+              >
+                −
+              </button>
+              <span className="w-10 text-center text-base font-semibold">{item.quantity}</span>
+              <button
+                type="button"
+                onClick={() => updateQuantity(item.barcode, item.quantity + 1)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white text-lg font-bold text-gray-700 shadow-sm hover:bg-gray-100"
+                aria-label="زيادة الكمية"
+              >
+                +
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-semibold text-gray-900">
+                {formatCurrency(item.unitPrice * item.quantity)}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeItem(item.barcode)}
+                className="-m-2 px-2 py-2 text-sm font-medium text-red-600"
+                aria-label="حذف المنتج"
+              >
+                حذف
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

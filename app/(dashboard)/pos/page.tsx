@@ -11,9 +11,17 @@ import { HeldSalesList } from "@/components/features/pos/HeldSalesList";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { listHeldSales } from "@/services/heldSales.service";
+
+type POSView = "cashier" | "held" | "returns";
+
+const POS_VIEWS: { value: POSView; label: string }[] = [
+  { value: "cashier", label: "الكاشير" },
+  { value: "held", label: "المعلقة" },
+  { value: "returns", label: "المرتجعات" },
+];
 
 export default function POSPage() {
   const {
@@ -29,10 +37,9 @@ export default function POSPage() {
     holdCurrentSale,
   } = usePOSContext();
 
+  const [activeView, setActiveView] = useState<POSView>("cashier");
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [paidAmount, setPaidAmount] = useState("");
-  const [isReturnsOpen, setIsReturnsOpen] = useState(false);
-  const [isHeldSalesOpen, setIsHeldSalesOpen] = useState(false);
   const [heldCount, setHeldCount] = useState(0);
   const [isHoldNoteOpen, setIsHoldNoteOpen] = useState(false);
   const [holdNote, setHoldNote] = useState("");
@@ -76,64 +83,99 @@ export default function POSPage() {
 
   return (
     <div className="-m-3 flex h-[calc(100vh-4rem-4.25rem)] flex-col overflow-hidden bg-gray-50 lg:-m-6 lg:h-[calc(100vh-4rem)]">
-      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
-        <h1 className="text-lg font-bold text-brand-700">شاشة الكاشير</h1>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="secondary" size="sm" onClick={() => setIsHeldSalesOpen(true)}>
-            الفواتير المعلقة
-            {heldCount > 0 ? (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-600 px-1.5 text-xs font-bold text-white">
-                {heldCount}
-              </span>
-            ) : null}
-          </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={() => setIsReturnsOpen(true)}>
-            المرتجعات
-          </Button>
+      <header className="shrink-0 border-b border-gray-200 bg-white px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="shrink-0 text-base font-bold text-brand-700">شاشة الكاشير</h1>
+          <div role="tablist" className="flex flex-1 max-w-xs items-center gap-1 rounded-full bg-gray-100 p-1">
+            {POS_VIEWS.map((view) => (
+              <button
+                key={view.value}
+                type="button"
+                role="tab"
+                aria-selected={activeView === view.value}
+                onClick={() => setActiveView(view.value)}
+                className={cn(
+                  "relative flex flex-1 items-center justify-center gap-1 rounded-full px-2 py-2 text-xs font-semibold transition-colors sm:text-sm",
+                  activeView === view.value ? "bg-white text-brand-700 shadow-sm" : "text-gray-500",
+                )}
+              >
+                {view.label}
+                {view.value === "held" && heldCount > 0 ? (
+                  <span className="inline-flex h-4 min-w-[18px] items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold text-white">
+                    {heldCount}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
-      <div className="px-4 pt-4">
+      <div className="px-3 pt-3">
         <OfflineBanner />
       </div>
 
-      <div className="flex flex-1 flex-col gap-4 overflow-hidden p-4 lg:flex-row">
-        <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
-          <div className="relative">
-            <BarcodeScanner />
-          </div>
-          <CartGrid />
-        </section>
+      <div className="flex flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row lg:gap-4 lg:p-4">
+        {activeView === "cashier" ? (
+          <>
+            <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
+              <div className="border-b border-gray-100 bg-white p-3">
+                <BarcodeScanner />
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+                <CartGrid />
+              </div>
+            </section>
 
-        <aside className="flex w-full shrink-0 flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 lg:w-80">
-          <div className="flex flex-col gap-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">المجموع الفرعي</span>
-              <span className="font-medium">{formatCurrency(totals.subtotal)}</span>
-            </div>
-            <Input
-              type="number"
-              label="الخصم"
-              min={0}
-              value={discountAmount || ""}
-              onChange={(event) => setDiscountAmount(Number(event.target.value) || 0)}
+            <aside className="flex w-full shrink-0 flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 lg:w-80">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-sm text-gray-500">
+                  <span>المجموع الفرعي</span>
+                  <span className="font-medium text-gray-700">{formatCurrency(totals.subtotal)}</span>
+                </div>
+                <Input
+                  type="number"
+                  label="الخصم"
+                  min={0}
+                  value={discountAmount || ""}
+                  onChange={(event) => setDiscountAmount(Number(event.target.value) || 0)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-600">الإجمالي</span>
+                  <span className="text-2xl font-bold text-brand-700">{formatCurrency(totals.totalAmount)}</span>
+                </div>
+
+                <Button size="xl" className="w-full" disabled={items.length === 0} onClick={openCheckout}>
+                  دفع
+                </Button>
+
+                <div className="flex gap-2">
+                  <Button variant="secondary" className="flex-1" disabled={items.length === 0} onClick={openHoldModal}>
+                    تعليق
+                  </Button>
+                  <Button variant="ghost" className="flex-1" disabled={items.length === 0} onClick={clear}>
+                    تفريغ السلة
+                  </Button>
+                </div>
+              </div>
+            </aside>
+          </>
+        ) : activeView === "held" ? (
+          <section className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-gray-200 bg-white p-3">
+            <HeldSalesList
+              activeCartHasItems={items.length > 0}
+              onCountChange={setHeldCount}
+              onResumed={() => setActiveView("cashier")}
             />
-            <div className="flex justify-between border-t border-gray-200 pt-2 text-lg font-bold text-brand-700">
-              <span>الإجمالي</span>
-              <span>{formatCurrency(totals.totalAmount)}</span>
-            </div>
-          </div>
-
-          <Button size="xl" className="mt-auto" disabled={items.length === 0} onClick={openCheckout}>
-            دفع
-          </Button>
-          <Button variant="secondary" disabled={items.length === 0} onClick={openHoldModal}>
-            تعليق
-          </Button>
-          <Button variant="ghost" disabled={items.length === 0} onClick={clear}>
-            تفريغ السلة
-          </Button>
-        </aside>
+          </section>
+        ) : (
+          <section className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-gray-200 bg-white p-3">
+            <ReturnLookup />
+          </section>
+        )}
       </div>
 
       <Modal open={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} title="إتمام الدفع">
@@ -164,10 +206,6 @@ export default function POSPage() {
         {lastReceipt ? <ReceiptPrinter receipt={lastReceipt} onClose={dismissReceipt} /> : null}
       </Modal>
 
-      <Modal open={isReturnsOpen} onClose={() => setIsReturnsOpen(false)} title="مرتجعات اليوم">
-        <ReturnLookup />
-      </Modal>
-
       <Modal open={isHoldNoteOpen} onClose={() => setIsHoldNoteOpen(false)} title="تعليق الفاتورة">
         <div className="flex flex-col gap-4">
           <Input
@@ -181,14 +219,6 @@ export default function POSPage() {
             {isHolding ? "جارٍ التعليق..." : "تعليق الفاتورة"}
           </Button>
         </div>
-      </Modal>
-
-      <Modal open={isHeldSalesOpen} onClose={() => setIsHeldSalesOpen(false)} title="الفواتير المعلقة">
-        <HeldSalesList
-          activeCartHasItems={items.length > 0}
-          onCountChange={setHeldCount}
-          onResumed={() => setIsHeldSalesOpen(false)}
-        />
       </Modal>
     </div>
   );

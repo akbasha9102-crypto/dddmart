@@ -73,7 +73,7 @@ export function HeldSalesList({ onResumed, activeCartHasItems, onCountChange }: 
   return (
     <div className="flex flex-col gap-3">
       {guardMessage ? <p className="text-sm text-red-600">{guardMessage}</p> : null}
-      <div className="flex max-h-[60vh] flex-col divide-y divide-gray-100 overflow-y-auto">
+      <div className="flex flex-col divide-y divide-gray-100">
         {heldSales.map((row) => {
           const items = row.items as unknown as CartItem[];
           const { totalAmount } = calculateTotals(items, row.discount_amount);

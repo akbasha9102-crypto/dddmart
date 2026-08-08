@@ -61,7 +61,7 @@ export function ReturnLookup() {
       {filteredSales.length === 0 ? (
         <p className="p-6 text-center text-gray-400">لا توجد فواتير اليوم</p>
       ) : (
-        <div className="flex max-h-[60vh] flex-col divide-y divide-gray-100 overflow-y-auto">
+        <div className="flex flex-col divide-y divide-gray-100">
           {filteredSales.map((sale) => (
             <button
               key={sale.id}
