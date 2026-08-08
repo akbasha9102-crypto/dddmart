@@ -15,6 +15,7 @@ const BASE_PRODUCT: Product = {
   min_stock_threshold: 5,
   unit: "قطعة",
   is_active: true,
+  store_id: "store-1",
   created_at: "",
   updated_at: "",
 };
@@ -28,6 +29,7 @@ const CARTON_UNIT: ProductUnit = {
   sale_price: 40,
   sort_order: 0,
   is_active: true,
+  store_id: "store-1",
   created_at: "",
   updated_at: "",
 };
@@ -162,6 +164,7 @@ describe("recordStockPurchase", () => {
         costPerPurchasedUnit: 1.5,
       },
       "user-1",
+      "store-1",
     );
     expect(rpcSpy).toHaveBeenCalledWith("receive_product_stock", {
       p_product_id: "product-1",
@@ -169,7 +172,7 @@ describe("recordStockPurchase", () => {
       p_unit_base_cost: 1.5,
     });
     expect(insertSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ action_type: "stock_received", user_id: "user-1" }),
+      expect.objectContaining({ action_type: "stock_received", user_id: "user-1", store_id: "store-1" }),
     );
     expect(result).toEqual(RECEIVED_PRODUCT);
   });
@@ -187,6 +190,7 @@ describe("recordStockPurchase", () => {
         costPerPurchasedUnit: 36,
       },
       "user-1",
+      "store-1",
     );
     expect(rpcSpy).toHaveBeenCalledWith("receive_product_stock", {
       p_product_id: "product-1",
@@ -209,6 +213,7 @@ describe("recordStockPurchase", () => {
           costPerPurchasedUnit: 1.5,
         },
         "user-1",
+        "store-1",
       ),
     ).rejects.toThrow("تعذر استلام المخزون");
   });

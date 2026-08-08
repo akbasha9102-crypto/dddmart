@@ -13,6 +13,7 @@ const BASE_PRODUCT: ProductWithCategory = {
   min_stock_threshold: 5,
   unit: "قطعة",
   is_active: true,
+  store_id: "store-1",
   created_at: "",
   updated_at: "",
   category: null,
@@ -27,6 +28,7 @@ const CARTON_UNIT: ProductUnit = {
   sale_price: 40,
   sort_order: 0,
   is_active: true,
+  store_id: "store-1",
   created_at: "",
   updated_at: "",
 };

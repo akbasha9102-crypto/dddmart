@@ -20,7 +20,7 @@ interface CategoryManageSheetProps {
 
 /** Modal listing every category (including inactive) with inline edit/delete/restore actions. */
 export function CategoryManageSheet({ categories, onChanged, onClose }: CategoryManageSheetProps) {
-  const { user } = useAuth();
+  const { user, storeId } = useAuth();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -28,10 +28,11 @@ export function CategoryManageSheet({ categories, onChanged, onClose }: Category
   const sorted = [...categories].sort((a, b) => a.sort_order - b.sort_order);
 
   async function handleDelete(category: Category) {
+    if (!storeId) return;
     setBusyId(category.id);
     try {
       const supabase = createClient();
-      await deleteCategory(supabase, category.id, user?.id ?? null);
+      await deleteCategory(supabase, category.id, user?.id ?? null, storeId);
       setConfirmingDeleteId(null);
       onChanged();
     } finally {
@@ -40,10 +41,11 @@ export function CategoryManageSheet({ categories, onChanged, onClose }: Category
   }
 
   async function handleRestore(category: Category) {
+    if (!storeId) return;
     setBusyId(category.id);
     try {
       const supabase = createClient();
-      await updateCategory(supabase, category.id, { is_active: true }, user?.id ?? null);
+      await updateCategory(supabase, category.id, { is_active: true }, user?.id ?? null, storeId);
       onChanged();
     } finally {
       setBusyId(null);

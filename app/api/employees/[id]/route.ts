@@ -39,6 +39,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const adminClient = createAdminClient();
 
+  // createAdminClient() bypasses RLS entirely, so store isolation for this
+  // route must be checked explicitly here — without this, an admin could
+  // deactivate another store's employee by guessing/enumerating an id (see
+  // docs/superpowers/specs/2026-08-08-multi-tenancy-foundation-design.md).
+  const { data: targetProfile, error: targetProfileError } = await adminClient
+    .from("profiles")
+    .select("store_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (targetProfileError) {
+    console.error("[PATCH /api/employees/[id]] failed to load target profile:", targetProfileError);
+    return NextResponse.json({ error: "حدث خطأ أثناء تحديث حالة الحساب" }, { status: 500 });
+  }
+
+  if (!targetProfile || targetProfile.store_id !== admin.storeId) {
+    return NextResponse.json({ error: "ما عندك صلاحية لهذا الإجراء" }, { status: 403 });
+  }
+
   const banValue = isActive ? "none" : "876000h";
   const { error: authError } = await adminClient.auth.admin.updateUserById(id, { ban_duration: banValue });
 

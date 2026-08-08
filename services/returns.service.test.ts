@@ -17,6 +17,7 @@ const INSERTED_RETURN: Return = {
   refund_amount: 4,
   reason: "تالف",
   actor_id: "user-1",
+  store_id: "store-1",
   created_at: "",
 };
 
@@ -31,6 +32,7 @@ const RESTORED_PRODUCT: Product = {
   min_stock_threshold: 5,
   unit: "قطعة",
   is_active: true,
+  store_id: "store-1",
   created_at: "",
   updated_at: "",
 };
@@ -103,7 +105,7 @@ describe("recordReturn", () => {
     });
 
     await expect(
-      recordReturn(supabase, { ...BASE_PARAMS, quantity: 2 }, "user-1"),
+      recordReturn(supabase, { ...BASE_PARAMS, quantity: 2 }, "user-1", "store-1"),
     ).rejects.toThrow("المتبقي: 1");
   });
 
@@ -118,6 +120,7 @@ describe("recordReturn", () => {
       supabase,
       { ...BASE_PARAMS, quantity: 1, unitLabel: "كارتون", unitConversionFactor: 24 },
       "user-1",
+      "store-1",
     );
 
     expect(rpcSpy).toHaveBeenCalledWith("adjust_product_stock", {
@@ -133,7 +136,7 @@ describe("recordReturn", () => {
       rpcData: [RESTORED_PRODUCT],
     });
 
-    const result = await recordReturn(supabase, { ...BASE_PARAMS, productId: null }, "user-1");
+    const result = await recordReturn(supabase, { ...BASE_PARAMS, productId: null }, "user-1", "store-1");
 
     expect(insertSpy).toHaveBeenCalled();
     expect(rpcSpy).not.toHaveBeenCalled();

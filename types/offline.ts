@@ -20,5 +20,7 @@ export interface PendingSale {
   createdAt: string; // ISO, used for FIFO replay order and receipt display
   payload: CheckoutPayload;
   invoiceNumber: string; // generated locally at checkout time so the receipt can show it immediately
+  /** The cashier's store_id at the moment this sale was queued (AuthContext, cached from the last online session) — replayed as-is by syncManager.ts, not re-resolved from "whoever happens to be online now". */
+  storeId: string;
   conflicts?: { productId: string; productName: string; requestedBaseUnits: number }[];
 }

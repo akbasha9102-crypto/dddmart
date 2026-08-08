@@ -16,6 +16,7 @@ function makeSale(overrides: Partial<PendingSale> = {}): PendingSale {
     createdAt: "2026-08-07T10:00:00.000Z",
     payload: BASE_PAYLOAD,
     invoiceNumber: "INV-20260807-0001",
+    storeId: "store-1",
     ...overrides,
   };
 }

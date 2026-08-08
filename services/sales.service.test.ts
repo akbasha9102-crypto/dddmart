@@ -108,6 +108,7 @@ const CASH_SALE: Sale = {
   change_amount: 0,
   payment_method: "cash",
   customer_id: null,
+  store_id: "store-1",
   created_at: "",
 };
 
@@ -124,14 +125,14 @@ describe("createSale — credit sale path", () => {
     const { supabase } = createFakeSupabase(CREDIT_SALE);
 
     await expect(
-      createSale(supabase, { ...BASE_PAYLOAD, paymentMethod: "credit" }),
+      createSale(supabase, { ...BASE_PAYLOAD, paymentMethod: "credit" }, "store-1"),
     ).rejects.toThrow("يجب اختيار زبون");
   });
 
   it("forces paid_amount and change_amount to 0 on the inserted sales row for a credit sale", async () => {
     const { supabase, salesInsertSpy } = createFakeSupabase(CREDIT_SALE);
 
-    await createSale(supabase, { ...BASE_PAYLOAD, paymentMethod: "credit", customerId: "customer-1" });
+    await createSale(supabase, { ...BASE_PAYLOAD, paymentMethod: "credit", customerId: "customer-1" }, "store-1");
 
     expect(salesInsertSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -139,6 +140,7 @@ describe("createSale — credit sale path", () => {
         paid_amount: 0,
         change_amount: 0,
         customer_id: "customer-1",
+        store_id: "store-1",
       }),
     );
   });
@@ -146,23 +148,24 @@ describe("createSale — credit sale path", () => {
   it("inserts a customer_transactions row (type sale, amount = total, sale_id = new sale id) for a credit sale", async () => {
     const { supabase, customerTransactionsInsertSpy } = createFakeSupabase(CREDIT_SALE);
 
-    await createSale(supabase, { ...BASE_PAYLOAD, paymentMethod: "credit", customerId: "customer-1" });
+    await createSale(supabase, { ...BASE_PAYLOAD, paymentMethod: "credit", customerId: "customer-1" }, "store-1");
 
     expect(customerTransactionsInsertSpy).toHaveBeenCalledWith({
       customer_id: "customer-1",
       type: "sale",
       amount: 200,
       sale_id: "sale-1",
+      store_id: "store-1",
     });
   });
 
   it("regression guard: default/omitted paymentMethod still inserts payment_method cash and never touches customer_transactions", async () => {
     const { supabase, salesInsertSpy, customerTransactionsInsertSpy } = createFakeSupabase(CASH_SALE);
 
-    await createSale(supabase, BASE_PAYLOAD);
+    await createSale(supabase, BASE_PAYLOAD, "store-1");
 
     expect(salesInsertSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ payment_method: "cash", customer_id: null }),
+      expect.objectContaining({ payment_method: "cash", customer_id: null, store_id: "store-1" }),
     );
     expect(customerTransactionsInsertSpy).not.toHaveBeenCalled();
   });

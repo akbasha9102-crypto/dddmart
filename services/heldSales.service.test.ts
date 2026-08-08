@@ -24,6 +24,7 @@ const HELD_ROW: HeldSale = {
   items: CART_ITEMS as unknown as Record<string, unknown>[],
   discount_amount: 1.5,
   note: "أحمد",
+  store_id: "store-1",
   created_at: "2026-08-08T10:00:00Z",
 };
 
@@ -38,6 +39,7 @@ const RESTORED_PRODUCT: Product = {
   min_stock_threshold: 5,
   unit: "قطعة",
   is_active: true,
+  store_id: "store-1",
   created_at: "",
   updated_at: "",
 };
@@ -100,18 +102,23 @@ describe("holdSale", () => {
   it("inserts with the correct fields and returns the inserted row", async () => {
     const { supabase, insertSpy } = createFakeSupabase({ insertedRow: HELD_ROW });
 
-    const result = await holdSale(supabase, {
-      cashierId: "user-1",
-      items: CART_ITEMS,
-      discountAmount: 1.5,
-      note: "أحمد",
-    });
+    const result = await holdSale(
+      supabase,
+      {
+        cashierId: "user-1",
+        items: CART_ITEMS,
+        discountAmount: 1.5,
+        note: "أحمد",
+      },
+      "store-1",
+    );
 
     expect(insertSpy).toHaveBeenCalledWith({
       cashier_id: "user-1",
       items: CART_ITEMS,
       discount_amount: 1.5,
       note: "أحمد",
+      store_id: "store-1",
     });
     expect(result).toEqual(HELD_ROW);
   });

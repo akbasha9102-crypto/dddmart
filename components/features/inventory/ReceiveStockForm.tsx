@@ -20,7 +20,7 @@ interface ReceiveStockFormProps {
 
 /** Lets an admin record a wholesale purchase (e.g. a كرتونة) and automatically break it down into base-unit stock, updating cost_price via weighted average. */
 export function ReceiveStockForm({ product, units, onSaved, onCancel }: ReceiveStockFormProps) {
-  const { user } = useAuth();
+  const { user, storeId } = useAuth();
   const unitOptions = useMemo(
     () => [
       { value: "base", label: product.unit, factor: 1 },
@@ -61,6 +61,11 @@ export function ReceiveStockForm({ product, units, onSaved, onCancel }: ReceiveS
       return;
     }
 
+    if (!storeId) {
+      setError("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
+      return;
+    }
+
     setError(null);
     setIsSaving(true);
     try {
@@ -76,6 +81,7 @@ export function ReceiveStockForm({ product, units, onSaved, onCancel }: ReceiveS
           costPerPurchasedUnit: costNumber,
         },
         user?.id ?? null,
+        storeId,
       );
       onSaved(updated);
     } catch (err) {

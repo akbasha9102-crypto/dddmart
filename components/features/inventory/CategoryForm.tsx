@@ -22,7 +22,7 @@ const DEFAULT_ICON = "shopping-basket";
 
 /** Create/edit form for a category (name, color, icon) — reuses ProductForm's create-or-edit pattern. */
 export function CategoryForm({ category, onSaved, onCancel }: CategoryFormProps) {
-  const { user } = useAuth();
+  const { user, storeId } = useAuth();
   const [name, setName] = useState(category?.name ?? "");
   const [color, setColor] = useState(category?.color ?? DEFAULT_COLOR);
   const [icon, setIcon] = useState(category?.icon ?? DEFAULT_ICON);
@@ -31,6 +31,12 @@ export function CategoryForm({ category, onSaved, onCancel }: CategoryFormProps)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!storeId) {
+      setError("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
+      return;
+    }
+
     setError(null);
     setIsSaving(true);
 
@@ -39,8 +45,8 @@ export function CategoryForm({ category, onSaved, onCancel }: CategoryFormProps)
       const actorId = user?.id ?? null;
 
       const saved = category
-        ? await updateCategory(supabase, category.id, { name: name.trim(), color, icon }, actorId)
-        : await createCategory(supabase, { name, color, icon }, actorId);
+        ? await updateCategory(supabase, category.id, { name: name.trim(), color, icon }, actorId, storeId)
+        : await createCategory(supabase, { name, color, icon }, actorId, storeId);
 
       onSaved(saved);
     } catch (err) {

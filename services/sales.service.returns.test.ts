@@ -86,6 +86,7 @@ const SALE: Sale = {
   change_amount: 0,
   payment_method: "cash",
   customer_id: null,
+  store_id: "store-1",
   created_at: new Date().toISOString(),
 };
 
@@ -101,6 +102,7 @@ const SALE_ITEM: SaleItem = {
   unit_label: null,
   unit_conversion_factor: 1,
   cost_price: 6,
+  store_id: "store-1",
 };
 
 describe("getDailySalesSummary — returns/damage regression", () => {
@@ -135,6 +137,7 @@ describe("getDailySalesSummary — returns/damage regression", () => {
       refund_amount: 20,
       reason: null,
       actor_id: null,
+      store_id: "store-1",
       created_at: new Date().toISOString(),
     };
 
@@ -165,6 +168,7 @@ describe("getDailySalesSummary — returns/damage regression", () => {
       loss_amount: 18,
       reason: null,
       actor_id: null,
+      store_id: "store-1",
       created_at: new Date().toISOString(),
     };
 

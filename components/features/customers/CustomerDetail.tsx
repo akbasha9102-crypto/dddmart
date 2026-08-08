@@ -22,7 +22,7 @@ interface CustomerDetailProps {
 
 /** Full transaction history + payment recording + statement printing for one customer. */
 export function CustomerDetail({ detail, onBack, onChanged }: CustomerDetailProps) {
-  const { user } = useAuth();
+  const { user, storeId } = useAuth();
   const { customer, balance, transactions } = detail;
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -42,12 +42,19 @@ export function CustomerDetail({ detail, onBack, onChanged }: CustomerDetailProp
     setPaymentError(null);
     setIsSubmittingPayment(true);
 
+    if (!storeId) {
+      setPaymentError("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
+      setIsSubmittingPayment(false);
+      return;
+    }
+
     try {
       const supabase = createClient();
       await recordPayment(
         supabase,
         { customerId: customer.id, amount: Number(paymentAmount) || 0 },
         user?.id ?? null,
+        storeId,
       );
       setIsPaymentModalOpen(false);
       onChanged();

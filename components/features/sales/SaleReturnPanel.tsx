@@ -26,7 +26,7 @@ const REASON_PRESETS = ["تالف", "غير مطابق", "غير مرغوب به
  * cashier-facing entry point.
  */
 export function SaleReturnPanel({ sale }: SaleReturnPanelProps) {
-  const { user } = useAuth();
+  const { user, storeId } = useAuth();
   const [items, setItems] = useState<SaleItem[] | null>(null);
   const [returnedQuantities, setReturnedQuantities] = useState<Map<string, number>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
@@ -78,6 +78,7 @@ export function SaleReturnPanel({ sale }: SaleReturnPanelProps) {
               item={item}
               remaining={remaining}
               actorId={user?.id ?? null}
+              storeId={storeId}
               onReturned={(quantityReturned) => handleLineReturned(item.id, quantityReturned)}
             />
           );
@@ -92,12 +93,14 @@ function ReturnLineRow({
   item,
   remaining,
   actorId,
+  storeId,
   onReturned,
 }: {
   sale: Sale;
   item: SaleItem;
   remaining: number;
   actorId: string | null;
+  storeId: string | null;
   onReturned: (quantityReturned: number) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -145,6 +148,10 @@ function ReturnLineRow({
       setError("قيمة الاسترجاع يجب أن تكون صفراً أو أكبر");
       return;
     }
+    if (!storeId) {
+      setError("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
+      return;
+    }
 
     setError(null);
     setIsSaving(true);
@@ -165,6 +172,7 @@ function ReturnLineRow({
           reason: finalReason,
         },
         actorId,
+        storeId,
       );
       onReturned(quantityNumber);
       setIsOpen(false);

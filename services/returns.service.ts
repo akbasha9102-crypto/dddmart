@@ -44,7 +44,12 @@ export interface RecordReturnParams {
  * Insert-before-increment is deliberate: if incrementStock fails/no-ops,
  * the return is still recorded rather than silently lost.
  */
-export async function recordReturn(supabase: Client, params: RecordReturnParams, actorId: string | null): Promise<Return> {
+export async function recordReturn(
+  supabase: Client,
+  params: RecordReturnParams,
+  actorId: string | null,
+  storeId: string,
+): Promise<Return> {
   const { data: existingReturns, error: existingError } = await supabase
     .from("returns")
     .select("quantity")
@@ -72,6 +77,7 @@ export async function recordReturn(supabase: Client, params: RecordReturnParams,
       refund_amount: params.refundAmount,
       reason: params.reason,
       actor_id: actorId,
+      store_id: storeId,
     })
     .select()
     .single();
@@ -88,6 +94,7 @@ export async function recordReturn(supabase: Client, params: RecordReturnParams,
     entityType: "sale",
     entityId: params.saleId,
     description: `تم إرجاع ${params.quantity} من "${params.productName}" بقيمة ${params.refundAmount}`,
+    storeId,
   });
 
   return inserted;

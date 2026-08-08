@@ -8,8 +8,8 @@ import { useAuth } from "@/context/AuthContext";
 const POSContext = createContext<UsePOSReturn | null>(null);
 
 export function POSProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const pos = usePOS({ cashierId: user?.id ?? null });
+  const { user, storeId } = useAuth();
+  const pos = usePOS({ cashierId: user?.id ?? null, storeId });
 
   return <POSContext.Provider value={pos}>{children}</POSContext.Provider>;
 }

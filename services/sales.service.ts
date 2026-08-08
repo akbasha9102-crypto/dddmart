@@ -7,8 +7,14 @@ import { logOperation } from "@/services/archive.service";
 
 type Client = SupabaseClient<Database>;
 
-/** Pure row-building step, split out from createSale so the quantity/price/unit-snapshot math is testable without touching Supabase. */
-export function buildSaleItemRows(saleId: string, items: CheckoutPayload["items"]): SaleItemInsert[] {
+/**
+ * Pure row-building step, split out from createSale so the
+ * quantity/price/unit-snapshot math is testable without touching Supabase.
+ * Deliberately omits store_id — this function has no store context of its
+ * own; createSale adds store_id when it maps these rows into the actual
+ * insert payload.
+ */
+export function buildSaleItemRows(saleId: string, items: CheckoutPayload["items"]): Omit<SaleItemInsert, "store_id">[] {
   return items.map((item) => ({
     sale_id: saleId,
     product_id: item.productId,
@@ -164,7 +170,7 @@ function dayKeyOf(value: string | Date): string {
  * has the selected CustomerWithBalance in hand, populates it for receipt
  * printing.
  */
-export async function createSale(supabase: Client, payload: CheckoutPayload): Promise<CompletedSale> {
+export async function createSale(supabase: Client, payload: CheckoutPayload, storeId: string): Promise<CompletedSale> {
   if (payload.items.length === 0) {
     throw new Error("لا يمكن إتمام عملية بيع فارغة");
   }
@@ -196,13 +202,17 @@ export async function createSale(supabase: Client, payload: CheckoutPayload): Pr
       change_amount: changeAmount,
       payment_method: paymentMethod,
       customer_id: paymentMethod === "credit" ? customerId : null,
+      store_id: storeId,
     })
     .select()
     .single();
 
   if (saleError) throw saleError;
 
-  const saleItems: SaleItemInsert[] = buildSaleItemRows(sale.id, payload.items);
+  const saleItems: SaleItemInsert[] = buildSaleItemRows(sale.id, payload.items).map((item) => ({
+    ...item,
+    store_id: storeId,
+  }));
 
   const { data: items, error: itemsError } = await supabase.from("sale_items").insert(saleItems).select();
 
@@ -214,6 +224,7 @@ export async function createSale(supabase: Client, payload: CheckoutPayload): Pr
       type: "sale",
       amount: totalAmount,
       sale_id: sale.id,
+      store_id: storeId,
     });
 
     if (transactionError) throw transactionError;
@@ -225,6 +236,7 @@ export async function createSale(supabase: Client, payload: CheckoutPayload): Pr
     entityType: "sale",
     entityId: sale.id,
     description: `تم تسجيل عملية بيع بقيمة ${totalAmount} (فاتورة ${sale.invoice_number})`,
+    storeId,
   });
 
   return { sale, items: items ?? [], changeAmount };

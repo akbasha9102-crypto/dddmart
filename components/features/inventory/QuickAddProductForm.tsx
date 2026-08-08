@@ -21,7 +21,7 @@ interface QuickAddProductFormProps {
 /** Mobile-first minimal add-product form: name + barcode + quantity + category only. */
 export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
   const router = useRouter();
-  const { user, role } = useAuth();
+  const { user, role, storeId } = useAuth();
   const [name, setName] = useState("");
   const [barcode, setBarcode] = useState("");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -37,6 +37,10 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
 
     if (Number(salePrice) <= 0) {
       setError("سعر البيع يجب أن يكون أكبر من صفر");
+      return;
+    }
+    if (!storeId) {
+      setError("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
       return;
     }
 
@@ -56,6 +60,7 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
           barcode: barcode.trim() || generateBarcode(),
         },
         user?.id ?? null,
+        storeId,
       );
 
       router.push("/inventory");

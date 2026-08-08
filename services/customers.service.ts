@@ -79,7 +79,12 @@ export interface CreateCustomerInput {
   notes?: string | null;
 }
 
-export async function createCustomer(supabase: Client, input: CreateCustomerInput, actorId: string | null): Promise<Customer> {
+export async function createCustomer(
+  supabase: Client,
+  input: CreateCustomerInput,
+  actorId: string | null,
+  storeId: string,
+): Promise<Customer> {
   const trimmedName = input.name.trim();
   if (!trimmedName) {
     throw new Error("اسم الزبون مطلوب");
@@ -92,6 +97,7 @@ export async function createCustomer(supabase: Client, input: CreateCustomerInpu
       phone: input.phone ?? null,
       credit_limit: input.creditLimit ?? 0,
       notes: input.notes ?? null,
+      store_id: storeId,
     })
     .select()
     .single();
@@ -104,12 +110,19 @@ export async function createCustomer(supabase: Client, input: CreateCustomerInpu
     entityType: "customer",
     entityId: data.id,
     description: `تم إضافة الزبون "${data.name}"`,
+    storeId,
   });
 
   return data;
 }
 
-export async function updateCustomer(supabase: Client, id: string, patch: CustomerUpdate, actorId: string | null): Promise<Customer> {
+export async function updateCustomer(
+  supabase: Client,
+  id: string,
+  patch: CustomerUpdate,
+  actorId: string | null,
+  storeId: string,
+): Promise<Customer> {
   const { data, error } = await supabase.from("customers").update(patch).eq("id", id).select().single();
 
   if (error) throw error;
@@ -120,13 +133,14 @@ export async function updateCustomer(supabase: Client, id: string, patch: Custom
     entityType: "customer",
     entityId: data.id,
     description: `تم تعديل بيانات الزبون "${data.name}"`,
+    storeId,
   });
 
   return data;
 }
 
 /** Soft delete: sets is_active = false so the customer disappears from active listings while preserving history/FKs. */
-export async function archiveCustomer(supabase: Client, id: string, actorId: string | null): Promise<void> {
+export async function archiveCustomer(supabase: Client, id: string, actorId: string | null, storeId: string): Promise<void> {
   const { data, error } = await supabase.from("customers").update({ is_active: false }).eq("id", id).select().single();
 
   if (error) throw error;
@@ -137,6 +151,7 @@ export async function archiveCustomer(supabase: Client, id: string, actorId: str
     entityType: "customer",
     entityId: data.id,
     description: `تم أرشفة الزبون "${data.name}"`,
+    storeId,
   });
 }
 
@@ -152,7 +167,12 @@ export interface RecordPaymentInput {
  * (an Arabic error shows the actual remaining balance) — matches
  * recordReturn's validate-before-insert style in returns.service.ts.
  */
-export async function recordPayment(supabase: Client, input: RecordPaymentInput, actorId: string | null): Promise<CustomerTransaction> {
+export async function recordPayment(
+  supabase: Client,
+  input: RecordPaymentInput,
+  actorId: string | null,
+  storeId: string,
+): Promise<CustomerTransaction> {
   if (input.amount <= 0) {
     throw new Error("مبلغ الدفعة يجب أن يكون أكبر من صفر");
   }
@@ -169,6 +189,7 @@ export async function recordPayment(supabase: Client, input: RecordPaymentInput,
       type: "payment",
       amount: input.amount,
       note: input.note ?? null,
+      store_id: storeId,
     })
     .select()
     .single();
@@ -181,6 +202,7 @@ export async function recordPayment(supabase: Client, input: RecordPaymentInput,
     entityType: "customer",
     entityId: input.customerId,
     description: `تم تسجيل دفعة بقيمة ${input.amount} من الزبون`,
+    storeId,
   });
 
   return data;

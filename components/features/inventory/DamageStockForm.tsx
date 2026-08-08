@@ -20,7 +20,7 @@ const REASON_PRESETS = ["منتهي الصلاحية", "مكسور/تالف", "�
 
 /** Lets an admin record damaged/expired stock, decrementing quantity by the product's own base unit (no unit picker — v1 scope). Mirrors ReceiveStockForm's shape. */
 export function DamageStockForm({ product, onSaved, onCancel }: DamageStockFormProps) {
-  const { user } = useAuth();
+  const { user, storeId } = useAuth();
   const [quantity, setQuantity] = useState("");
   const [reasonPreset, setReasonPreset] = useState<(typeof REASON_PRESETS)[number]>(REASON_PRESETS[0]);
   const [customReason, setCustomReason] = useState("");
@@ -48,6 +48,11 @@ export function DamageStockForm({ product, onSaved, onCancel }: DamageStockFormP
       return;
     }
 
+    if (!storeId) {
+      setError("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
+      return;
+    }
+
     setError(null);
     setIsSaving(true);
     try {
@@ -61,6 +66,7 @@ export function DamageStockForm({ product, onSaved, onCancel }: DamageStockFormP
           reason: finalReason,
         },
         user?.id ?? null,
+        storeId,
       );
       onSaved();
     } catch (err) {

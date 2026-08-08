@@ -21,7 +21,12 @@ export interface RecordDamageParams {
  * snapshotted from decrementStock's own returned row (not a separate
  * fetch), so it reflects the exact cost basis at the moment of decrement.
  */
-export async function recordDamage(supabase: Client, params: RecordDamageParams, actorId: string | null): Promise<StockDamage> {
+export async function recordDamage(
+  supabase: Client,
+  params: RecordDamageParams,
+  actorId: string | null,
+  storeId: string,
+): Promise<StockDamage> {
   const updated = await decrementStock(supabase, params.productId, params.quantity);
   if (!updated) {
     const { data: current, error: currentError } = await supabase
@@ -46,6 +51,7 @@ export async function recordDamage(supabase: Client, params: RecordDamageParams,
       loss_amount: lossAmount,
       reason: params.reason,
       actor_id: actorId,
+      store_id: storeId,
     })
     .select()
     .single();
@@ -58,6 +64,7 @@ export async function recordDamage(supabase: Client, params: RecordDamageParams,
     entityType: "stock",
     entityId: params.productId,
     description: `تم تسجيل تلف ${params.quantity} ${updated.unit} من "${params.productName}" — خسارة ${lossAmount}`,
+    storeId,
   });
 
   return inserted;

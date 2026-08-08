@@ -17,7 +17,7 @@ interface CustomerFormProps {
 
 /** Create/edit form for a customer (name, phone, credit limit, notes) — mirrors CategoryForm's create-or-edit shape. */
 export function CustomerForm({ customer, onSaved, onCancel }: CustomerFormProps) {
-  const { user } = useAuth();
+  const { user, storeId } = useAuth();
   const [name, setName] = useState(customer?.name ?? "");
   const [phone, setPhone] = useState(customer?.phone ?? "");
   const [creditLimit, setCreditLimit] = useState(String(customer?.credit_limit ?? 0));
@@ -27,6 +27,12 @@ export function CustomerForm({ customer, onSaved, onCancel }: CustomerFormProps)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!storeId) {
+      setError("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
+      return;
+    }
+
     setError(null);
     setIsSaving(true);
 
@@ -45,11 +51,13 @@ export function CustomerForm({ customer, onSaved, onCancel }: CustomerFormProps)
               notes: notes.trim() || null,
             },
             actorId,
+            storeId,
           )
         : await createCustomer(
             supabase,
             { name, phone: phone.trim() || null, creditLimit: Number(creditLimit) || 0, notes: notes.trim() || null },
             actorId,
+            storeId,
           );
 
       onSaved(saved);

@@ -11,6 +11,7 @@ const INSERTED_TRANSACTION: CustomerTransaction = {
   amount: 5000,
   sale_id: null,
   note: null,
+  store_id: "store-1",
   created_at: "",
 };
 
@@ -67,7 +68,7 @@ describe("recordPayment", () => {
     const { supabase } = createFakeSupabase({ balance: 10000, insertedTransaction: INSERTED_TRANSACTION });
 
     await expect(
-      recordPayment(supabase, { customerId: "customer-1", amount: 0 }, "user-1"),
+      recordPayment(supabase, { customerId: "customer-1", amount: 0 }, "user-1", "store-1"),
     ).rejects.toThrow("أكبر من صفر");
   });
 
@@ -75,7 +76,7 @@ describe("recordPayment", () => {
     const { supabase } = createFakeSupabase({ balance: 3000, insertedTransaction: INSERTED_TRANSACTION });
 
     await expect(
-      recordPayment(supabase, { customerId: "customer-1", amount: 5000 }, "user-1"),
+      recordPayment(supabase, { customerId: "customer-1", amount: 5000 }, "user-1", "store-1"),
     ).rejects.toThrow("المتبقي: 3000");
   });
 
@@ -85,13 +86,14 @@ describe("recordPayment", () => {
       insertedTransaction: INSERTED_TRANSACTION,
     });
 
-    const result = await recordPayment(supabase, { customerId: "customer-1", amount: 5000 }, "user-1");
+    const result = await recordPayment(supabase, { customerId: "customer-1", amount: 5000 }, "user-1", "store-1");
 
     expect(insertSpy).toHaveBeenCalledWith({
       customer_id: "customer-1",
       type: "payment",
       amount: 5000,
       note: null,
+      store_id: "store-1",
     });
     expect(logInsertSpy).toHaveBeenCalledWith(expect.objectContaining({ action_type: "customer_payment_recorded" }));
     expect(result).toEqual(INSERTED_TRANSACTION);

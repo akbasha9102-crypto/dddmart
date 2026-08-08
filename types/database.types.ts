@@ -28,12 +28,37 @@ export type CustomerTransactionType = "sale" | "payment";
 export interface Database {
   public: {
     Tables: {
+      stores: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           id: string;
           full_name: string;
           role: UserRole;
           is_active: boolean;
+          store_id: string;
           created_at: string;
         };
         Insert: {
@@ -41,6 +66,7 @@ export interface Database {
           full_name: string;
           role?: UserRole;
           is_active?: boolean;
+          store_id: string;
           created_at?: string;
         };
         Update: {
@@ -48,6 +74,7 @@ export interface Database {
           full_name?: string;
           role?: UserRole;
           is_active?: boolean;
+          store_id?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -60,6 +87,7 @@ export interface Database {
           is_active: boolean;
           color: string;
           icon: string;
+          store_id: string;
           created_at: string;
         };
         Insert: {
@@ -69,6 +97,7 @@ export interface Database {
           is_active?: boolean;
           color?: string;
           icon?: string;
+          store_id: string;
           created_at?: string;
         };
         Update: {
@@ -78,6 +107,7 @@ export interface Database {
           is_active?: boolean;
           color?: string;
           icon?: string;
+          store_id?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -94,6 +124,7 @@ export interface Database {
           min_stock_threshold: number;
           unit: string;
           is_active: boolean;
+          store_id: string;
           created_at: string;
           updated_at: string;
         };
@@ -108,6 +139,7 @@ export interface Database {
           min_stock_threshold?: number;
           unit?: string;
           is_active?: boolean;
+          store_id: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -122,6 +154,7 @@ export interface Database {
           min_stock_threshold?: number;
           unit?: string;
           is_active?: boolean;
+          store_id?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -147,6 +180,7 @@ export interface Database {
           change_amount: number;
           payment_method: PaymentMethod;
           customer_id: string | null;
+          store_id: string;
           created_at: string;
         };
         Insert: {
@@ -160,6 +194,7 @@ export interface Database {
           change_amount?: number;
           payment_method?: PaymentMethod;
           customer_id?: string | null;
+          store_id: string;
           created_at?: string;
         };
         Update: {
@@ -173,6 +208,7 @@ export interface Database {
           change_amount?: number;
           payment_method?: PaymentMethod;
           customer_id?: string | null;
+          store_id?: string;
           created_at?: string;
         };
         Relationships: [
@@ -205,6 +241,7 @@ export interface Database {
           unit_label: string | null;
           unit_conversion_factor: number;
           cost_price: number;
+          store_id: string;
         };
         Insert: {
           id?: string;
@@ -218,6 +255,7 @@ export interface Database {
           unit_label?: string | null;
           unit_conversion_factor?: number;
           cost_price?: number;
+          store_id: string;
         };
         Update: {
           id?: string;
@@ -231,6 +269,7 @@ export interface Database {
           unit_label?: string | null;
           unit_conversion_factor?: number;
           cost_price?: number;
+          store_id?: string;
         };
         Relationships: [
           {
@@ -259,6 +298,7 @@ export interface Database {
           sale_price: number;
           sort_order: number;
           is_active: boolean;
+          store_id: string;
           created_at: string;
           updated_at: string;
         };
@@ -271,6 +311,7 @@ export interface Database {
           sale_price: number;
           sort_order?: number;
           is_active?: boolean;
+          store_id: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -283,6 +324,7 @@ export interface Database {
           sale_price?: number;
           sort_order?: number;
           is_active?: boolean;
+          store_id?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -309,6 +351,7 @@ export interface Database {
           refund_amount: number;
           reason: string | null;
           actor_id: string | null;
+          store_id: string;
           created_at: string;
         };
         Insert: {
@@ -323,6 +366,7 @@ export interface Database {
           refund_amount: number;
           reason?: string | null;
           actor_id?: string | null;
+          store_id: string;
           created_at?: string;
         };
         Update: {
@@ -337,6 +381,7 @@ export interface Database {
           refund_amount?: number;
           reason?: string | null;
           actor_id?: string | null;
+          store_id?: string;
           created_at?: string;
         };
         Relationships: [
@@ -380,6 +425,7 @@ export interface Database {
           loss_amount: number;
           reason: string | null;
           actor_id: string | null;
+          store_id: string;
           created_at: string;
         };
         Insert: {
@@ -391,6 +437,7 @@ export interface Database {
           loss_amount: number;
           reason?: string | null;
           actor_id?: string | null;
+          store_id: string;
           created_at?: string;
         };
         Update: {
@@ -402,6 +449,7 @@ export interface Database {
           loss_amount?: number;
           reason?: string | null;
           actor_id?: string | null;
+          store_id?: string;
           created_at?: string;
         };
         Relationships: [
@@ -428,6 +476,7 @@ export interface Database {
           items: Record<string, unknown>[];
           discount_amount: number;
           note: string | null;
+          store_id: string;
           created_at: string;
         };
         Insert: {
@@ -436,6 +485,7 @@ export interface Database {
           items: Record<string, unknown>[];
           discount_amount?: number;
           note?: string | null;
+          store_id: string;
           created_at?: string;
         };
         Update: {
@@ -444,6 +494,7 @@ export interface Database {
           items?: Record<string, unknown>[];
           discount_amount?: number;
           note?: string | null;
+          store_id?: string;
           created_at?: string;
         };
         Relationships: [
@@ -464,6 +515,7 @@ export interface Database {
           credit_limit: number;
           notes: string | null;
           is_active: boolean;
+          store_id: string;
           created_at: string;
         };
         Insert: {
@@ -473,6 +525,7 @@ export interface Database {
           credit_limit?: number;
           notes?: string | null;
           is_active?: boolean;
+          store_id: string;
           created_at?: string;
         };
         Update: {
@@ -482,6 +535,7 @@ export interface Database {
           credit_limit?: number;
           notes?: string | null;
           is_active?: boolean;
+          store_id?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -494,6 +548,7 @@ export interface Database {
           amount: number;
           sale_id: string | null;
           note: string | null;
+          store_id: string;
           created_at: string;
         };
         Insert: {
@@ -503,6 +558,7 @@ export interface Database {
           amount: number;
           sale_id?: string | null;
           note?: string | null;
+          store_id: string;
           created_at?: string;
         };
         Update: {
@@ -512,6 +568,7 @@ export interface Database {
           amount?: number;
           sale_id?: string | null;
           note?: string | null;
+          store_id?: string;
           created_at?: string;
         };
         Relationships: [
@@ -540,6 +597,7 @@ export interface Database {
           entity_id: string | null;
           description: string;
           metadata: Record<string, unknown>;
+          store_id: string;
           created_at: string;
         };
         Insert: {
@@ -550,6 +608,7 @@ export interface Database {
           entity_id?: string | null;
           description: string;
           metadata?: Record<string, unknown>;
+          store_id: string;
           created_at?: string;
         };
         Update: {
@@ -560,6 +619,7 @@ export interface Database {
           entity_id?: string | null;
           description?: string;
           metadata?: Record<string, unknown>;
+          store_id?: string;
           created_at?: string;
         };
         Relationships: [

@@ -24,7 +24,7 @@ export interface ResumedHeldSale {
  * stock is already decremented at add-to-cart time (see hooks/usePOS.ts),
  * so the held items remain reserved exactly as they are.
  */
-export async function holdSale(supabase: Client, params: HoldSaleParams): Promise<HeldSale> {
+export async function holdSale(supabase: Client, params: HoldSaleParams, storeId: string): Promise<HeldSale> {
   const { data, error } = await supabase
     .from("held_sales")
     .insert({
@@ -32,6 +32,7 @@ export async function holdSale(supabase: Client, params: HoldSaleParams): Promis
       items: params.items as unknown as Record<string, unknown>[],
       discount_amount: params.discountAmount,
       note: params.note,
+      store_id: storeId,
     })
     .select()
     .single();

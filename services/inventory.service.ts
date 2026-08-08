@@ -12,6 +12,7 @@ export async function adjustStock(
   productId: string,
   delta: number,
   actorId: string | null,
+  storeId: string,
 ): Promise<Product> {
   const { data: current, error: fetchError } = await supabase
     .from("products")
@@ -36,6 +37,7 @@ export async function adjustStock(
     entityType: "stock",
     entityId: data.id,
     description: `تم تعديل مخزون "${data.name}" بمقدار ${delta > 0 ? "+" : ""}${delta}`,
+    storeId,
   });
 
   return data;

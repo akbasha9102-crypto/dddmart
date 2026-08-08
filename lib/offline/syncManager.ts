@@ -56,11 +56,15 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
           continue;
         }
 
-        await createSale(supabase, {
-          ...sale.payload,
-          id: sale.localId,
-          invoiceNumber: sale.invoiceNumber,
-        });
+        await createSale(
+          supabase,
+          {
+            ...sale.payload,
+            id: sale.localId,
+            invoiceNumber: sale.invoiceNumber,
+          },
+          sale.storeId,
+        );
 
         outbox = markSynced(outbox, sale.localId);
         await setOutbox(outbox);

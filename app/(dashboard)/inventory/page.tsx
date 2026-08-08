@@ -26,7 +26,7 @@ import { ReceiveStockForm } from "@/components/features/inventory/ReceiveStockFo
 import { DamageStockForm } from "@/components/features/inventory/DamageStockForm";
 
 export default function InventoryPage() {
-  const { user } = useAuth();
+  const { user, storeId } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [productsWithCategory, setProductsWithCategory] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -76,8 +76,9 @@ export default function InventoryPage() {
   }
 
   async function handleDeleteProduct(product: Product | ProductWithCategory) {
+    if (!storeId) return;
     const supabase = createClient();
-    await deleteProduct(supabase, product.id, user?.id ?? null);
+    await deleteProduct(supabase, product.id, user?.id ?? null, storeId);
     void loadData();
   }
 

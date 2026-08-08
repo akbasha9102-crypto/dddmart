@@ -11,6 +11,7 @@ export interface LogOperationInput {
   entityId?: string | null;
   description: string;
   metadata?: Record<string, unknown>;
+  storeId: string;
 }
 
 /**
@@ -32,6 +33,7 @@ export async function logOperation(supabase: Client, input: LogOperationInput): 
       entity_id: input.entityId ?? null,
       description: input.description,
       metadata: input.metadata ?? {},
+      store_id: input.storeId,
     });
 
     if (error) throw error;

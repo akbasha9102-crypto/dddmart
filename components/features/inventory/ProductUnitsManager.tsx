@@ -9,6 +9,7 @@ import {
   isUniqueViolation,
   listProductUnits,
 } from "@/services/products.service";
+import { useAuth } from "@/context/AuthContext";
 import type { ProductUnit } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -19,6 +20,7 @@ interface ProductUnitsManagerProps {
 
 /** Lets a manager attach extra sale units (كيس، كارتون...) to an existing product, each with its own barcode and price. */
 export function ProductUnitsManager({ productId }: ProductUnitsManagerProps) {
+  const { storeId } = useAuth();
   const [units, setUnits] = useState<ProductUnit[]>([]);
   const [unitName, setUnitName] = useState("");
   const [conversionFactor, setConversionFactor] = useState("");
@@ -47,19 +49,27 @@ export function ProductUnitsManager({ productId }: ProductUnitsManagerProps) {
       setError("سعر البيع يجب أن يكون أكبر من صفر");
       return;
     }
+    if (!storeId) {
+      setError("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
+      return;
+    }
 
     setError(null);
     setIsSaving(true);
     try {
       const supabase = createClient();
-      const created = await createProductUnit(supabase, {
-        product_id: productId,
-        unit_name: unitName,
-        conversion_factor: factor,
-        barcode,
-        sale_price: Number(salePrice),
-        sort_order: units.length,
-      });
+      const created = await createProductUnit(
+        supabase,
+        {
+          product_id: productId,
+          unit_name: unitName,
+          conversion_factor: factor,
+          barcode,
+          sale_price: Number(salePrice),
+          sort_order: units.length,
+        },
+        storeId,
+      );
       setUnits([...units, created]);
       setUnitName("");
       setConversionFactor("");

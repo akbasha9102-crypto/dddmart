@@ -16,6 +16,7 @@ const DECREMENTED_PRODUCT: Product = {
   min_stock_threshold: 5,
   unit: "قطعة",
   is_active: true,
+  store_id: "store-1",
   created_at: "",
   updated_at: "",
 };
@@ -29,6 +30,7 @@ const INSERTED_DAMAGE: StockDamage = {
   loss_amount: 3,
   reason: "منتهي الصلاحية",
   actor_id: "user-1",
+  store_id: "store-1",
   created_at: "",
 };
 
@@ -85,7 +87,7 @@ describe("recordDamage", () => {
   it("throws a friendly Arabic error and inserts nothing when decrementStock returns null (insufficient stock)", async () => {
     const { supabase, insertSpy, logInsertSpy } = createFakeSupabase({ rpcData: [], currentQuantity: 1 });
 
-    await expect(recordDamage(supabase, BASE_PARAMS, "user-1")).rejects.toThrow("الكمية أكبر من المخزون المتوفر");
+    await expect(recordDamage(supabase, BASE_PARAMS, "user-1", "store-1")).rejects.toThrow("الكمية أكبر من المخزون المتوفر");
     expect(insertSpy).not.toHaveBeenCalled();
     expect(logInsertSpy).not.toHaveBeenCalled();
   });
@@ -93,10 +95,10 @@ describe("recordDamage", () => {
   it("computes loss_amount from the post-decrement cost_price returned by decrementStock", async () => {
     const { supabase, insertSpy } = createFakeSupabase({ rpcData: [DECREMENTED_PRODUCT] });
 
-    const result = await recordDamage(supabase, BASE_PARAMS, "user-1");
+    const result = await recordDamage(supabase, BASE_PARAMS, "user-1", "store-1");
 
     expect(insertSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ cost_price: 1.5, loss_amount: 3, quantity: 2 }),
+      expect.objectContaining({ cost_price: 1.5, loss_amount: 3, quantity: 2, store_id: "store-1" }),
     );
     expect(result).toEqual(INSERTED_DAMAGE);
   });
@@ -104,10 +106,10 @@ describe("recordDamage", () => {
   it("logs a damage_recorded operation after a successful decrement", async () => {
     const { supabase, logInsertSpy } = createFakeSupabase({ rpcData: [DECREMENTED_PRODUCT] });
 
-    await recordDamage(supabase, BASE_PARAMS, "user-1");
+    await recordDamage(supabase, BASE_PARAMS, "user-1", "store-1");
 
     expect(logInsertSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ action_type: "damage_recorded", user_id: "user-1" }),
+      expect.objectContaining({ action_type: "damage_recorded", user_id: "user-1", store_id: "store-1" }),
     );
   });
 });

@@ -20,9 +20,10 @@ import { applyLocalStockDelta, getCachedCatalog, getCachedUnitsList, resolveBarc
 
 interface UsePOSOptions {
   cashierId: string | null;
+  storeId: string | null;
 }
 
-export function usePOS({ cashierId }: UsePOSOptions) {
+export function usePOS({ cashierId, storeId }: UsePOSOptions) {
   const cart = useCart();
   const { isOnline } = useOnlineStatus();
   const [isScanning, setIsScanning] = useState(false);
@@ -207,6 +208,10 @@ export function usePOS({ cashierId }: UsePOSOptions) {
         throw new Error("البيع بالآجل غير متاح في وضع عدم الاتصال");
       }
 
+      if (!storeId) {
+        throw new Error("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
+      }
+
       setIsCheckingOut(true);
       try {
         if (!isOnline) {
@@ -227,6 +232,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
             createdAt: new Date().toISOString(),
             payload,
             invoiceNumber,
+            storeId,
           });
 
           const { subtotal, discountAmount, totalAmount } = calculateTotals(cart.items, cart.discountAmount);
@@ -247,6 +253,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
               // is reached for a credit sale while offline.
               payment_method: "cash",
               customer_id: null,
+              store_id: storeId,
               created_at: now,
             },
             items: cart.items.map((item, index) => ({
@@ -261,6 +268,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
               unit_label: item.unitName ?? null,
               unit_conversion_factor: item.unitConversionFactor ?? 1,
               cost_price: item.costPrice,
+              store_id: storeId,
             })),
             changeAmount,
           };
@@ -272,14 +280,18 @@ export function usePOS({ cashierId }: UsePOSOptions) {
         }
 
         const supabase = createClient();
-        const result = await createSale(supabase, {
-          items: cart.items,
-          discountAmount: cart.discountAmount,
-          paidAmount,
-          cashierId,
-          paymentMethod,
-          customerId,
-        });
+        const result = await createSale(
+          supabase,
+          {
+            items: cart.items,
+            discountAmount: cart.discountAmount,
+            paidAmount,
+            cashierId,
+            paymentMethod,
+            customerId,
+          },
+          storeId,
+        );
         const resultWithCustomerName: CompletedSale = {
           ...result,
           customerName: paymentMethod === "credit" ? customerName : undefined,
@@ -292,23 +304,30 @@ export function usePOS({ cashierId }: UsePOSOptions) {
         setIsCheckingOut(false);
       }
     },
-    [cart, cashierId, isOnline],
+    [cart, cashierId, isOnline, storeId],
   );
 
   const dismissReceipt = useCallback(() => setLastReceipt(null), []);
 
   const holdCurrentSale = useCallback(
     async (note: string | null) => {
+      if (!storeId) {
+        throw new Error("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
+      }
       const supabase = createClient();
-      await holdSale(supabase, {
-        cashierId,
-        items: cart.items,
-        discountAmount: cart.discountAmount,
-        note,
-      });
+      await holdSale(
+        supabase,
+        {
+          cashierId,
+          items: cart.items,
+          discountAmount: cart.discountAmount,
+          note,
+        },
+        storeId,
+      );
       cart.clear();
     },
-    [cart, cashierId],
+    [cart, cashierId, storeId],
   );
 
   const resumeSale = useCallback(

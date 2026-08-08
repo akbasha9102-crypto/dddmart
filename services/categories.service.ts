@@ -33,6 +33,7 @@ export async function createCategory(
   supabase: Client,
   input: { name: string; color?: string; icon?: string },
   actorId: string | null,
+  storeId: string,
 ): Promise<Category> {
   const trimmedName = input.name.trim();
 
@@ -43,6 +44,7 @@ export async function createCategory(
       sort_order: NEW_CATEGORY_SORT_ORDER,
       color: input.color,
       icon: input.icon,
+      store_id: storeId,
     })
     .select()
     .single();
@@ -66,6 +68,7 @@ export async function createCategory(
     entityType: "category",
     entityId: data.id,
     description: `تم إضافة القسم "${data.name}"`,
+    storeId,
   });
 
   return data;
@@ -76,6 +79,7 @@ export async function updateCategory(
   id: string,
   patch: CategoryUpdate,
   actorId: string | null,
+  storeId: string,
 ): Promise<Category> {
   const { data, error } = await supabase.from("categories").update(patch).eq("id", id).select().single();
 
@@ -87,13 +91,14 @@ export async function updateCategory(
     entityType: "category",
     entityId: data.id,
     description: `تم تعديل القسم "${data.name}"`,
+    storeId,
   });
 
   return data;
 }
 
 /** Soft delete: sets is_active = false so the category disappears from active listings while preserving history/FKs. */
-export async function deleteCategory(supabase: Client, id: string, actorId: string | null): Promise<void> {
+export async function deleteCategory(supabase: Client, id: string, actorId: string | null, storeId: string): Promise<void> {
   const { data, error } = await supabase
     .from("categories")
     .update({ is_active: false })
@@ -109,5 +114,6 @@ export async function deleteCategory(supabase: Client, id: string, actorId: stri
     entityType: "category",
     entityId: data.id,
     description: `تم حذف القسم "${data.name}"`,
+    storeId,
   });
 }

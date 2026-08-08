@@ -23,7 +23,7 @@ interface ProductFormProps {
 }
 
 export function ProductForm({ product, categories, onSaved, onCancel }: ProductFormProps) {
-  const { user, role } = useAuth();
+  const { user, role, storeId } = useAuth();
   const [name, setName] = useState(product?.name ?? "");
   const [barcode, setBarcode] = useState(product?.barcode ?? "");
   const [categoryId, setCategoryId] = useState(product?.category_id ?? "");
@@ -69,6 +69,11 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
       return;
     }
 
+    if (!storeId) {
+      setError("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
+      return;
+    }
+
     setError(null);
     setIsSaving(true);
 
@@ -87,8 +92,8 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
 
       const actorId = user?.id ?? null;
       const saved = product
-        ? await updateProduct(supabase, product.id, payload, actorId)
-        : await createProduct(supabase, payload, actorId);
+        ? await updateProduct(supabase, product.id, payload, actorId, storeId)
+        : await createProduct(supabase, payload, actorId, storeId);
 
       onSaved(saved);
     } catch (err) {

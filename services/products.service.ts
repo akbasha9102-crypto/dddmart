@@ -73,8 +73,16 @@ export async function listProductUnits(supabase: Client, productId: string): Pro
   return data ?? [];
 }
 
-export async function createProductUnit(supabase: Client, unit: ProductUnitInsert): Promise<ProductUnit> {
-  const { data, error } = await supabase.from("product_units").insert(unit).select().single();
+export async function createProductUnit(
+  supabase: Client,
+  unit: Omit<ProductUnitInsert, "store_id">,
+  storeId: string,
+): Promise<ProductUnit> {
+  const { data, error } = await supabase
+    .from("product_units")
+    .insert({ ...unit, store_id: storeId })
+    .select()
+    .single();
   if (error) throw error;
   return data;
 }
@@ -138,8 +146,17 @@ export async function getLowStockProducts(supabase: Client): Promise<Product[]> 
   return (data ?? []).filter(isLowStock);
 }
 
-export async function createProduct(supabase: Client, product: ProductInsert, actorId: string | null): Promise<Product> {
-  const { data, error } = await supabase.from("products").insert(product).select().single();
+export async function createProduct(
+  supabase: Client,
+  product: Omit<ProductInsert, "store_id">,
+  actorId: string | null,
+  storeId: string,
+): Promise<Product> {
+  const { data, error } = await supabase
+    .from("products")
+    .insert({ ...product, store_id: storeId })
+    .select()
+    .single();
 
   if (error) throw error;
 
@@ -149,6 +166,7 @@ export async function createProduct(supabase: Client, product: ProductInsert, ac
     entityType: "product",
     entityId: data.id,
     description: `تم إضافة المنتج "${data.name}"`,
+    storeId,
   });
 
   return data;
@@ -163,6 +181,7 @@ export async function updateProduct(
   id: string,
   patch: ProductUpdate,
   actorId: string | null,
+  storeId: string,
 ): Promise<Product> {
   const { data, error } = await supabase.from("products").update(patch).eq("id", id).select().single();
 
@@ -174,13 +193,14 @@ export async function updateProduct(
     entityType: "product",
     entityId: data.id,
     description: `تم تعديل المنتج "${data.name}"`,
+    storeId,
   });
 
   return data;
 }
 
 /** Soft delete: sets is_active = false so the product disappears from active listings while preserving history/FKs. */
-export async function deleteProduct(supabase: Client, id: string, actorId: string | null): Promise<void> {
+export async function deleteProduct(supabase: Client, id: string, actorId: string | null, storeId: string): Promise<void> {
   const { data, error } = await supabase.from("products").update({ is_active: false }).eq("id", id).select().single();
 
   if (error) throw error;
@@ -191,6 +211,7 @@ export async function deleteProduct(supabase: Client, id: string, actorId: strin
     entityType: "product",
     entityId: data.id,
     description: `تم حذف المنتج "${data.name}"`,
+    storeId,
   });
 }
 
@@ -268,6 +289,7 @@ export async function recordStockPurchase(
     costPerPurchasedUnit: number;
   },
   actorId: string | null,
+  storeId: string,
 ): Promise<Product> {
   const addedBaseUnits = toBaseUnits(params.purchasedQuantity, params.conversionFactor);
   const unitBaseCost = toBaseUnitCost(params.costPerPurchasedUnit, params.conversionFactor);
@@ -281,6 +303,7 @@ export async function recordStockPurchase(
     entityType: "stock",
     entityId: updated.id,
     description: `تم استلام ${params.purchasedQuantity} ${params.unitName ?? "قطعة"} (${addedBaseUnits} ${updated.unit}) من "${params.productName}" — سعر التكلفة الجديد ${updated.cost_price}`,
+    storeId,
   });
 
   return updated;
