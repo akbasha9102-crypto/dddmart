@@ -24,7 +24,7 @@ export function HourlyBreakdownChart({ data }: HourlyBreakdownChartProps) {
               formatter={(value) => formatCurrency(Number(value))}
               labelFormatter={(label) => `الساعة ${label}:00`}
             />
-            <Bar dataKey="revenue" fill="#129055" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="revenue" fill="#cc785c" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

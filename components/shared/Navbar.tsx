@@ -10,11 +10,19 @@ export function Navbar() {
         DDD Mart
       </Link>
       <nav className="hidden items-center gap-6 lg:flex">
-        {PRIMARY_LINKS.map((link) => (
-          <Link key={link.href} href={link.href} className="text-sm font-medium text-gray-600 hover:text-brand-700">
-            {link.label}
-          </Link>
-        ))}
+        {PRIMARY_LINKS.map((link) => {
+          const Icon = link.icon;
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-brand-700"
+            >
+              <Icon className="h-4 w-4" />
+              {link.label}
+            </Link>
+          );
+        })}
       </nav>
     </header>
   );

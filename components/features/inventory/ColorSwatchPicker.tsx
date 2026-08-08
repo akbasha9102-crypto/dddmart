@@ -9,7 +9,7 @@ interface ColorSwatchPickerProps {
 }
 
 const COLOR_PALETTE = [
-  "#129055",
+  "#cc785c",
   "#dc2626",
   "#ea580c",
   "#ca8a04",

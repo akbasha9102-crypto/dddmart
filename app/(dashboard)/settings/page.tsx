@@ -38,15 +38,19 @@ export default function SettingsPage() {
       <h1 className="text-xl font-bold text-gray-900">الإعدادات</h1>
 
       <div className="flex flex-col gap-2">
-        {links.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="flex h-14 items-center rounded-lg border border-gray-200 bg-white px-4 text-base font-medium text-gray-900 hover:bg-gray-50"
-          >
-            {link.label}
-          </Link>
-        ))}
+        {links.map((link) => {
+          const Icon = link.icon;
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="flex h-14 items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 text-base font-medium text-gray-900 hover:bg-gray-50"
+            >
+              <Icon className="h-5 w-5 text-gray-500" />
+              {link.label}
+            </Link>
+          );
+        })}
       </div>
 
       {logoutError ? <p className="text-sm text-red-600">{logoutError}</p> : null}

@@ -1,6 +1,9 @@
+import { ShoppingCart, Package, Settings as SettingsIcon, BarChart3, Users, Archive as ArchiveIcon, type LucideIcon } from "lucide-react";
+
 export interface NavLink {
   href: string;
   label: string;
+  icon: LucideIcon;
 }
 
 export interface SettingsLink extends NavLink {
@@ -9,16 +12,16 @@ export interface SettingsLink extends NavLink {
 
 /** The three top-level tabs shown to every user, in every nav surface (BottomNav, Navbar, Sidebar). */
 export const PRIMARY_LINKS: NavLink[] = [
-  { href: "/pos", label: "الكاشير" },
-  { href: "/inventory", label: "المخزون" },
-  { href: "/settings", label: "الإعدادات" },
+  { href: "/pos", label: "الكاشير", icon: ShoppingCart },
+  { href: "/inventory", label: "المخزون", icon: Package },
+  { href: "/settings", label: "الإعدادات", icon: SettingsIcon },
 ];
 
 /** Links shown inside the /settings page. adminOnly links are hidden from cashiers there. */
 export const SETTINGS_LINKS: SettingsLink[] = [
-  { href: "/sales", label: "المبيعات", adminOnly: true },
-  { href: "/archive", label: "الأرشيف", adminOnly: false },
-  { href: "/employees", label: "الموظفون", adminOnly: true },
+  { href: "/sales", label: "المبيعات", adminOnly: true, icon: BarChart3 },
+  { href: "/archive", label: "الأرشيف", adminOnly: false, icon: ArchiveIcon },
+  { href: "/employees", label: "الموظفون", adminOnly: true, icon: Users },
 ];
 
 const SETTINGS_PATHS = ["/settings", "/sales", "/archive", "/employees"];

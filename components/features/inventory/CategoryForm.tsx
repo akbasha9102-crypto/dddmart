@@ -17,7 +17,7 @@ interface CategoryFormProps {
   onCancel: () => void;
 }
 
-const DEFAULT_COLOR = "#129055";
+const DEFAULT_COLOR = "#cc785c";
 const DEFAULT_ICON = "shopping-basket";
 
 /** Create/edit form for a category (name, color, icon) — reuses ProductForm's create-or-edit pattern. */

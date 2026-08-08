@@ -13,7 +13,7 @@ interface SalesTrendChartProps {
 type Metric = "totalRevenue" | "totalProfit" | "salesCount";
 
 const METRICS: { value: Metric; label: string; color: string; isCurrency: boolean }[] = [
-  { value: "totalRevenue", label: "الإيراد", color: "#129055", isCurrency: true },
+  { value: "totalRevenue", label: "الإيراد", color: "#cc785c", isCurrency: true },
   { value: "totalProfit", label: "الربح التقديري", color: "#0e7490", isCurrency: true },
   { value: "salesCount", label: "عدد الفواتير", color: "#7c3aed", isCurrency: false },
 ];

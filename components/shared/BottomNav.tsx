@@ -16,6 +16,7 @@ export function BottomNav() {
           link.href === "/settings"
             ? isSettingsPath(pathname)
             : pathname === link.href || pathname.startsWith(`${link.href}/`);
+        const Icon = link.icon;
         return (
           <Link
             key={link.href}
@@ -25,6 +26,7 @@ export function BottomNav() {
               isActive && "text-brand-700",
             )}
           >
+            <Icon className="h-5 w-5" />
             {link.label}
           </Link>
         );
