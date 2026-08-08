@@ -101,9 +101,20 @@ export default function InventoryPage() {
           <Button variant="secondary" className="hidden md:inline-flex" onClick={openCreateForm}>
             إضافة تفصيلية
           </Button>
-          <Button onClick={() => setIsAddChoiceOpen(true)}>+ إضافة</Button>
+          <Button className="hidden lg:inline-flex" onClick={() => setIsAddChoiceOpen(true)}>
+            + إضافة
+          </Button>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setIsAddChoiceOpen(true)}
+        aria-label="إضافة"
+        className="fixed bottom-20 left-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-3xl font-semibold text-white shadow-lg transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 lg:hidden"
+      >
+        +
+      </button>
 
       <Input
         type="text"

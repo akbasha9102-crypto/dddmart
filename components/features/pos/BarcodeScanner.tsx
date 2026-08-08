@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { usePOSContext } from "@/context/POSContext";
 import { useOfflineContext } from "@/context/OfflineContext";
@@ -11,42 +10,33 @@ import { listCategories } from "@/services/categories.service";
 import { getCachedCatalog } from "@/lib/offline/productCache";
 import { setCachedCategories, setCachedProducts } from "@/lib/offline/db";
 import type { Category, ProductWithCategory } from "@/types/product";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
 import { CameraBarcodeScanner } from "@/components/features/shared/CameraBarcodeScanner";
 import { ManualProductPicker } from "@/components/features/pos/ManualProductPicker";
 import { cn } from "@/lib/utils";
 
-type Mode = "barcode" | "manual";
+type Mode = "scan" | "manual";
 
 /**
- * Dual-mode barcode entry: a physical HID scanner fires keystrokes globally
- * (captured by useBarcodeScanner), while this input also accepts manual
- * typing for damaged/unreadable barcodes, or camera-based optical scanning.
- * Autofocused and refocused after every scan so the cashier never has to
- * click back into it.
- *
- * A separate "manual" mode lets the cashier pick category → product →
- * quantity instead of scanning, for items without a readable barcode.
+ * Barcode entry: a physical HID scanner fires keystrokes globally (captured
+ * by useBarcodeScanner) regardless of which UI mode is shown below. Visibly,
+ * the cashier has two explicit entry methods: an optical camera scan
+ * (one-shot action, opens a modal) or a manual category → product →
+ * quantity picker (persistent mode) for items without a readable barcode.
  */
 export function BarcodeScanner() {
-  const { scanBarcode, isScanning, scanError, addProductToCart } = usePOSContext();
+  const { scanBarcode, scanError, addProductToCart } = usePOSContext();
   const { isOnline } = useOfflineContext();
-  const [manualValue, setManualValue] = useState("");
-  const [mode, setMode] = useState<Mode>("barcode");
+  const [mode, setMode] = useState<Mode>("scan");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // The HID scanner listener stays enabled regardless of mode: it only
   // reacts to fast keystroke bursts outside of typing fields, so a stray
-  // physical scan while in manual mode is harmless (and re-enabling it
-  // automatically when switching back to barcode mode needs no extra code).
+  // physical scan while in manual mode is harmless.
   useBarcodeScanner({
     onScan: (barcode) => {
       void scanBarcode(barcode);
-      inputRef.current?.focus();
     },
   });
 
@@ -73,14 +63,6 @@ export function BarcodeScanner() {
     void loadData();
   }, [isOnline]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmed = manualValue.trim();
-    if (!trimmed) return;
-    void scanBarcode(trimmed);
-    setManualValue("");
-  }
-
   const handleDetected = useCallback(
     (barcode: string) => {
       setIsCameraOpen(false);
@@ -98,15 +80,10 @@ export function BarcodeScanner() {
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={() => setMode("barcode")}
-          className={cn(
-            "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
-            mode === "barcode"
-              ? "border-brand-600 bg-brand-600 text-white"
-              : "border-gray-200 bg-white text-gray-600",
-          )}
+          onClick={() => setIsCameraOpen(true)}
+          className="rounded-full border border-brand-600 bg-brand-600 px-4 py-1.5 text-sm font-medium text-white transition-colors"
         >
-          باركود
+          📷 مسح بالكاميرا
         </button>
         <button
           type="button"
@@ -122,39 +99,15 @@ export function BarcodeScanner() {
         </button>
       </div>
 
-      {mode === "barcode" ? (
-        <>
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <Input
-              ref={inputRef}
-              autoFocus={mode === "barcode"}
-              value={manualValue}
-              onChange={(event) => setManualValue(event.target.value)}
-              placeholder="امسح الباركود أو أدخله يدوياً..."
-              className="flex-1 text-lg"
-              aria-label="باركود المنتج"
-            />
-            <Button
-              type="button"
-              size="lg"
-              variant="secondary"
-              onClick={() => setIsCameraOpen(true)}
-              aria-label="مسح بالكاميرا"
-            >
-              📷
-            </Button>
-            <Button type="submit" size="lg" disabled={isScanning}>
-              {isScanning ? "..." : "إضافة"}
-            </Button>
-          </form>
-          {scanError ? (
-            <div className="absolute mt-14 rounded-lg bg-red-100 px-3 py-1 text-sm text-red-700">{scanError}</div>
-          ) : null}
-          <CameraBarcodeScanner open={isCameraOpen} onClose={() => setIsCameraOpen(false)} onDetected={handleDetected} />
-        </>
-      ) : (
+      {scanError ? (
+        <div className="rounded-lg bg-red-100 px-3 py-1 text-sm text-red-700">{scanError}</div>
+      ) : null}
+
+      {mode === "manual" ? (
         <ManualProductPicker products={products} categories={categories} onAdd={handleManualAdd} />
-      )}
+      ) : null}
+
+      <CameraBarcodeScanner open={isCameraOpen} onClose={() => setIsCameraOpen(false)} onDetected={handleDetected} />
     </div>
   );
 }

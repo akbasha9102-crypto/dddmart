@@ -4,7 +4,6 @@ import { useState } from "react";
 import { usePOSContext } from "@/context/POSContext";
 import { BarcodeScanner } from "@/components/features/pos/BarcodeScanner";
 import { CartGrid } from "@/components/features/pos/CartGrid";
-import { QuickKeys } from "@/components/features/pos/QuickKeys";
 import { ReceiptPrinter } from "@/components/features/pos/ReceiptPrinter";
 import { OfflineBanner } from "@/components/features/pos/OfflineBanner";
 import { Modal } from "@/components/ui/Modal";
@@ -46,7 +45,6 @@ export default function POSPage() {
     <div className="-m-3 flex h-[calc(100vh-4rem-4.25rem)] flex-col overflow-hidden bg-gray-50 lg:-m-6 lg:h-[calc(100vh-4rem)]">
       <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
         <h1 className="text-lg font-bold text-brand-700">شاشة الكاشير</h1>
-        <QuickKeys onCheckout={openCheckout} onClear={clear} />
       </header>
 
       <div className="px-4 pt-4">
@@ -81,10 +79,10 @@ export default function POSPage() {
           </div>
 
           <Button size="xl" className="mt-auto" disabled={items.length === 0} onClick={openCheckout}>
-            دفع (F2)
+            دفع
           </Button>
           <Button variant="ghost" disabled={items.length === 0} onClick={clear}>
-            تفريغ السلة (F4)
+            تفريغ السلة
           </Button>
         </aside>
       </div>
