@@ -14,7 +14,8 @@ import { CustomerPicker } from "@/components/features/pos/CustomerPicker";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { formatCurrency, cn } from "@/lib/utils";
+import { Toast } from "@/components/ui/Toast";
+import { formatCurrency, formatTime, cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { listHeldSales } from "@/services/heldSales.service";
 import { getCustomerBalance } from "@/services/customers.service";
@@ -54,9 +55,7 @@ export default function POSPage() {
   const [isDiscountOpen, setIsDiscountOpen] = useState(false);
   const [paidAmount, setPaidAmount] = useState("");
   const [heldCount, setHeldCount] = useState(0);
-  const [isHoldNoteOpen, setIsHoldNoteOpen] = useState(false);
-  const [holdNote, setHoldNote] = useState("");
-  const [isHolding, setIsHolding] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithBalance | null>(null);
@@ -69,21 +68,12 @@ export default function POSPage() {
     void listHeldSales(supabase).then((rows) => setHeldCount(rows.length));
   }, []);
 
-  function openHoldModal() {
+  async function handleHoldClick() {
     if (items.length === 0) return;
-    setHoldNote("");
-    setIsHoldNoteOpen(true);
-  }
-
-  async function handleConfirmHold() {
-    setIsHolding(true);
-    try {
-      await holdCurrentSale(holdNote.trim() || null);
-      setHeldCount((count) => count + 1);
-      setIsHoldNoteOpen(false);
-    } finally {
-      setIsHolding(false);
-    }
+    const holdLabel = `معلقة ${formatTime(new Date())} - ${formatCurrency(totals.totalAmount)}`;
+    await holdCurrentSale(holdLabel);
+    setHeldCount((count) => count + 1);
+    setToastMessage("تم تعليق الفاتورة بنجاح");
   }
 
   function openCheckout() {
@@ -214,7 +204,7 @@ export default function POSPage() {
               </Button>
 
               <div className="flex gap-2">
-                <Button variant="secondary" size="sm" className="flex-1" disabled={items.length === 0} onClick={openHoldModal}>
+                <Button variant="secondary" size="sm" className="flex-1" disabled={items.length === 0} onClick={handleHoldClick}>
                   تعليق
                 </Button>
                 <Button variant="ghost" size="sm" className="flex-1" disabled={items.length === 0} onClick={clear}>
@@ -319,20 +309,7 @@ export default function POSPage() {
         </div>
       </Modal>
 
-      <Modal open={isHoldNoteOpen} onClose={() => setIsHoldNoteOpen(false)} title="تعليق الفاتورة">
-        <div className="flex flex-col gap-4">
-          <Input
-            type="text"
-            label="ملاحظة (اختياري، مثال: اسم الزبون)"
-            autoFocus
-            value={holdNote}
-            onChange={(event) => setHoldNote(event.target.value)}
-          />
-          <Button size="lg" disabled={isHolding} onClick={handleConfirmHold}>
-            {isHolding ? "جارٍ التعليق..." : "تعليق الفاتورة"}
-          </Button>
-        </div>
-      </Modal>
+      {toastMessage ? <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} /> : null}
     </div>
   );
 }
