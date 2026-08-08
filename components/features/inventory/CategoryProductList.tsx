@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { PackagePlus, Pencil, Trash2 } from "lucide-react";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { isLowStock } from "@/types/product";
 import { cn } from "@/lib/utils";
 import { groupProductsByCategory } from "@/lib/categoryGroups";
 import { getCategoryIcon } from "@/lib/categoryIcons";
+import { useAuth } from "@/context/AuthContext";
+import { isAdminRole } from "@/lib/employees/adminCheck";
 import { ConfirmInline } from "@/components/ui/ConfirmInline";
 
 interface CategoryProductListProps {
@@ -14,10 +16,11 @@ interface CategoryProductListProps {
   categories: Category[];
   onEdit: (product: ProductWithCategory) => void;
   onDelete: (product: ProductWithCategory) => void;
+  onReceiveStock: (product: ProductWithCategory) => void;
 }
 
 /** Mobile-first grouped product list — horizontal category tabs + active panel. Primary product-management surface on mobile, so edit/delete live here too. */
-export function CategoryProductList({ products, categories, onEdit, onDelete }: CategoryProductListProps) {
+export function CategoryProductList({ products, categories, onEdit, onDelete, onReceiveStock }: CategoryProductListProps) {
   const groups = useMemo(() => groupProductsByCategory(products, categories), [products, categories]);
 
   const [activeId, setActiveId] = useState<string | null>(groups[0]?.id ?? null);
@@ -63,7 +66,13 @@ export function CategoryProductList({ products, categories, onEdit, onDelete }: 
           <p className="p-4 text-center text-gray-400">لا توجد منتجات بهذا القسم</p>
         ) : (
           activeGroup?.products.map((product) => (
-            <ProductRow key={product.id} product={product} onEdit={onEdit} onDelete={onDelete} />
+            <ProductRow
+              key={product.id}
+              product={product}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onReceiveStock={onReceiveStock}
+            />
           ))
         )}
       </div>
@@ -75,11 +84,14 @@ function ProductRow({
   product,
   onEdit,
   onDelete,
+  onReceiveStock,
 }: {
   product: ProductWithCategory;
   onEdit: (product: ProductWithCategory) => void;
   onDelete: (product: ProductWithCategory) => void;
+  onReceiveStock: (product: ProductWithCategory) => void;
 }) {
+  const { role } = useAuth();
   const [confirming, setConfirming] = useState(false);
 
   if (confirming) {
@@ -104,6 +116,16 @@ function ProductRow({
         {isLowStock(product) ? " ⚠" : ""}
       </span>
       <div className="flex items-center gap-1">
+        {isAdminRole(role) ? (
+          <button
+            type="button"
+            onClick={() => onReceiveStock(product)}
+            className="rounded-md p-1.5 text-gray-500 hover:bg-emerald-100 hover:text-emerald-700"
+            aria-label="استلام مخزون"
+          >
+            <PackagePlus className="h-4 w-4" />
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => onEdit(product)}

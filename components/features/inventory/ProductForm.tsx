@@ -1,17 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { createProduct, updateProduct } from "@/services/products.service";
+import { createProduct, updateProduct, listProductUnits } from "@/services/products.service";
 import { useAuth } from "@/context/AuthContext";
 import { isAdminRole } from "@/lib/employees/adminCheck";
-import type { Product, Category } from "@/types/product";
+import type { Product, Category, ProductUnit } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { BarcodeGenerator } from "./BarcodeGenerator";
 import { ProfitPreview } from "./ProfitPreview";
 import { ProductUnitsManager } from "./ProductUnitsManager";
+import { ReceiveStockForm } from "./ReceiveStockForm";
 
 interface ProductFormProps {
   product?: Product | null;
@@ -32,6 +34,32 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
   const [unit, setUnit] = useState(product?.unit ?? "قطعة");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [currentProduct, setCurrentProduct] = useState<Product | null>(product ?? null);
+  const [productUnits, setProductUnits] = useState<ProductUnit[]>([]);
+  const [isReceiveStockOpen, setIsReceiveStockOpen] = useState(false);
+
+  useEffect(() => {
+    setCurrentProduct(product ?? null);
+  }, [product]);
+
+  const currentProductId = currentProduct?.id;
+
+  useEffect(() => {
+    if (!currentProductId) return;
+    async function load() {
+      const supabase = createClient();
+      setProductUnits(await listProductUnits(supabase, currentProductId!));
+    }
+    void load();
+  }, [currentProductId]);
+
+  function handleStockReceived(updatedProduct: Product) {
+    setCurrentProduct(updatedProduct);
+    setCostPrice(String(updatedProduct.cost_price));
+    setQuantity(String(updatedProduct.quantity));
+    setIsReceiveStockOpen(false);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,84 +99,103 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <Input label="اسم المنتج" value={name} onChange={(event) => setName(event.target.value)} required />
+    <>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <Input label="اسم المنتج" value={name} onChange={(event) => setName(event.target.value)} required />
 
-      <BarcodeGenerator value={barcode} onChange={setBarcode} />
+        <BarcodeGenerator value={barcode} onChange={setBarcode} />
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="category" className="text-sm font-medium text-gray-700">
-          الفئة
-        </label>
-        <select
-          id="category"
-          value={categoryId ?? ""}
-          onChange={(event) => setCategoryId(event.target.value)}
-          className="h-11 rounded-lg border border-gray-300 px-3 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
-        >
-          <option value="">بدون فئة</option>
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-      </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="category" className="text-sm font-medium text-gray-700">
+            الفئة
+          </label>
+          <select
+            id="category"
+            value={categoryId ?? ""}
+            onChange={(event) => setCategoryId(event.target.value)}
+            className="h-11 rounded-lg border border-gray-300 px-3 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+          >
+            <option value="">بدون فئة</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        {isAdminRole(role) ? (
+        <div className="grid grid-cols-2 gap-4">
+          {isAdminRole(role) ? (
+            <Input
+              label="سعر التكلفة"
+              type="number"
+              min={0}
+              step="0.01"
+              value={costPrice}
+              onChange={(event) => setCostPrice(event.target.value)}
+              required
+            />
+          ) : null}
           <Input
-            label="سعر التكلفة"
+            label="سعر البيع"
             type="number"
             min={0}
             step="0.01"
-            value={costPrice}
-            onChange={(event) => setCostPrice(event.target.value)}
+            value={salePrice}
+            onChange={(event) => setSalePrice(event.target.value)}
             required
           />
+          <Input
+            label="الكمية"
+            type="number"
+            min={0}
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+          />
+          <Input
+            label="حد التنبيه"
+            type="number"
+            min={0}
+            value={minStock}
+            onChange={(event) => setMinStock(event.target.value)}
+          />
+          {isAdminRole(role) ? (
+            <ProfitPreview costPrice={costPrice} salePrice={salePrice} className="col-span-2" />
+          ) : null}
+        </div>
+
+        <Input label="الوحدة" value={unit} onChange={(event) => setUnit(event.target.value)} />
+
+        {product ? <ProductUnitsManager productId={product.id} /> : null}
+
+        {product && isAdminRole(role) ? (
+          <Button type="button" variant="secondary" onClick={() => setIsReceiveStockOpen(true)}>
+            استلام مخزون
+          </Button>
         ) : null}
-        <Input
-          label="سعر البيع"
-          type="number"
-          min={0}
-          step="0.01"
-          value={salePrice}
-          onChange={(event) => setSalePrice(event.target.value)}
-          required
-        />
-        <Input
-          label="الكمية"
-          type="number"
-          min={0}
-          value={quantity}
-          onChange={(event) => setQuantity(event.target.value)}
-        />
-        <Input
-          label="حد التنبيه"
-          type="number"
-          min={0}
-          value={minStock}
-          onChange={(event) => setMinStock(event.target.value)}
-        />
-        {isAdminRole(role) ? (
-          <ProfitPreview costPrice={costPrice} salePrice={salePrice} className="col-span-2" />
-        ) : null}
-      </div>
 
-      <Input label="الوحدة" value={unit} onChange={(event) => setUnit(event.target.value)} />
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-      {product ? <ProductUnitsManager productId={product.id} /> : null}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            إلغاء
+          </Button>
+          <Button type="submit" disabled={isSaving}>
+            {isSaving ? "جارٍ الحفظ..." : "حفظ"}
+          </Button>
+        </div>
+      </form>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={onCancel}>
-          إلغاء
-        </Button>
-        <Button type="submit" disabled={isSaving}>
-          {isSaving ? "جارٍ الحفظ..." : "حفظ"}
-        </Button>
-      </div>
-    </form>
+      {currentProduct ? (
+        <Modal open={isReceiveStockOpen} onClose={() => setIsReceiveStockOpen(false)} title="استلام مخزون">
+          <ReceiveStockForm
+            product={currentProduct}
+            units={productUnits}
+            onSaved={handleStockReceived}
+            onCancel={() => setIsReceiveStockOpen(false)}
+          />
+        </Modal>
+      ) : null}
+    </>
   );
 }

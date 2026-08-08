@@ -3,6 +3,7 @@ import type { Database } from "@/types/database.types";
 import { isLowStock } from "@/types/product";
 import type { Product, ProductInsert, ProductUpdate, ProductUnit, ProductUnitInsert, ProductUnitUpdate, ProductWithCategory } from "@/types/product";
 import { logOperation } from "@/services/archive.service";
+import { toBaseUnitCost, toBaseUnits } from "@/lib/units";
 
 type Client = SupabaseClient<Database>;
 
@@ -223,4 +224,64 @@ export async function incrementStock(supabase: Client, productId: string, quanti
   });
   if (error) throw error;
   return data?.[0] ?? null;
+}
+
+/**
+ * Atomically records a stock purchase: increments products.quantity by
+ * addedBaseUnits and recomputes products.cost_price as the weighted
+ * average of existing stock cost and the newly purchased stock's cost, in
+ * a single DB statement (receive_product_stock RPC) so it can't race with
+ * a concurrent sale/scan decrementing the same product's quantity.
+ * Returns null if addedBaseUnits/unitBaseCost fail their guards or the
+ * product no longer exists — callers must treat null as failure, not throw.
+ */
+export async function receiveStock(
+  supabase: Client,
+  productId: string,
+  addedBaseUnits: number,
+  unitBaseCost: number,
+): Promise<Product | null> {
+  const { data, error } = await supabase.rpc("receive_product_stock", {
+    p_product_id: productId,
+    p_added_base_units: addedBaseUnits,
+    p_unit_base_cost: unitBaseCost,
+  });
+  if (error) throw error;
+  return data?.[0] ?? null;
+}
+
+/**
+ * Records a purchase of stock-by-pack: converts the purchased quantity and
+ * per-unit cost into base-unit terms, calls receiveStock, and logs a
+ * stock_received audit entry. This is the function the UI calls.
+ * Throws if the product wasn't found or the RPC's guards rejected the
+ * input — surfaced as a generic Arabic error by the calling form.
+ */
+export async function recordStockPurchase(
+  supabase: Client,
+  params: {
+    productId: string;
+    productName: string;
+    purchasedQuantity: number;
+    unitName: string | null; // null = base unit (products.unit)
+    conversionFactor: number; // 1 for base unit
+    costPerPurchasedUnit: number;
+  },
+  actorId: string | null,
+): Promise<Product> {
+  const addedBaseUnits = toBaseUnits(params.purchasedQuantity, params.conversionFactor);
+  const unitBaseCost = toBaseUnitCost(params.costPerPurchasedUnit, params.conversionFactor);
+
+  const updated = await receiveStock(supabase, params.productId, addedBaseUnits, unitBaseCost);
+  if (!updated) throw new Error("تعذر استلام المخزون — تحقق من القيم المدخلة");
+
+  await logOperation(supabase, {
+    userId: actorId,
+    actionType: "stock_received",
+    entityType: "stock",
+    entityId: updated.id,
+    description: `تم استلام ${params.purchasedQuantity} ${params.unitName ?? "قطعة"} (${addedBaseUnits} ${updated.unit}) من "${params.productName}" — سعر التكلفة الجديد ${updated.cost_price}`,
+  });
+
+  return updated;
 }

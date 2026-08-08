@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { listAllProductUnits, resolveBarcode } from "./products.service";
+import { listAllProductUnits, receiveStock, recordStockPurchase, resolveBarcode } from "./products.service";
 import type { Database } from "@/types/database.types";
 import type { Product, ProductUnit } from "@/types/product";
 
@@ -101,5 +101,115 @@ describe("listAllProductUnits", () => {
     const supabase = createFakeSupabaseForUnits([]);
     const result = await listAllProductUnits(supabase);
     expect(result).toEqual([]);
+  });
+});
+
+/**
+ * Hand-rolled fake covering receiveStock's rpc() call and
+ * recordStockPurchase's follow-up logOperation insert. Deliberately
+ * minimal, matching the other fakes in this file.
+ */
+function createFakeSupabaseForReceiveStock(options: {
+  rpcData: Product[] | null;
+  rpcError?: unknown;
+}): { supabase: SupabaseClient<Database>; rpcSpy: ReturnType<typeof vi.fn>; insertSpy: ReturnType<typeof vi.fn> } {
+  const rpcSpy = vi.fn(async () => ({ data: options.rpcData, error: options.rpcError ?? null }));
+  const insertSpy = vi.fn(async () => ({ data: null, error: null }));
+  const supabase = {
+    rpc: rpcSpy,
+    from: () => ({ insert: insertSpy }),
+  } as unknown as SupabaseClient<Database>;
+  return { supabase, rpcSpy, insertSpy };
+}
+
+const RECEIVED_PRODUCT: Product = { ...BASE_PRODUCT, quantity: 74, cost_price: 1.5 };
+
+describe("receiveStock", () => {
+  it("builds the correct RPC args and returns the updated product", async () => {
+    const { supabase, rpcSpy } = createFakeSupabaseForReceiveStock({ rpcData: [RECEIVED_PRODUCT] });
+    const result = await receiveStock(supabase, "product-1", 24, 1.5);
+    expect(rpcSpy).toHaveBeenCalledWith("receive_product_stock", {
+      p_product_id: "product-1",
+      p_added_base_units: 24,
+      p_unit_base_cost: 1.5,
+    });
+    expect(result).toEqual(RECEIVED_PRODUCT);
+  });
+
+  it("returns null when the RPC returns an empty array", async () => {
+    const { supabase } = createFakeSupabaseForReceiveStock({ rpcData: [] });
+    const result = await receiveStock(supabase, "product-1", 24, 1.5);
+    expect(result).toBeNull();
+  });
+
+  it("throws when the RPC returns an error", async () => {
+    const { supabase } = createFakeSupabaseForReceiveStock({ rpcData: null, rpcError: new Error("boom") });
+    await expect(receiveStock(supabase, "product-1", 24, 1.5)).rejects.toThrow("boom");
+  });
+});
+
+describe("recordStockPurchase", () => {
+  it("passes a base-unit purchase (factor 1) through unchanged", async () => {
+    const { supabase, rpcSpy, insertSpy } = createFakeSupabaseForReceiveStock({ rpcData: [RECEIVED_PRODUCT] });
+    const result = await recordStockPurchase(
+      supabase,
+      {
+        productId: "product-1",
+        productName: "علبة علك",
+        purchasedQuantity: 10,
+        unitName: null,
+        conversionFactor: 1,
+        costPerPurchasedUnit: 1.5,
+      },
+      "user-1",
+    );
+    expect(rpcSpy).toHaveBeenCalledWith("receive_product_stock", {
+      p_product_id: "product-1",
+      p_added_base_units: 10,
+      p_unit_base_cost: 1.5,
+    });
+    expect(insertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ action_type: "stock_received", user_id: "user-1" }),
+    );
+    expect(result).toEqual(RECEIVED_PRODUCT);
+  });
+
+  it("multiplies quantity and divides cost for a carton purchase (factor 24)", async () => {
+    const { supabase, rpcSpy } = createFakeSupabaseForReceiveStock({ rpcData: [RECEIVED_PRODUCT] });
+    await recordStockPurchase(
+      supabase,
+      {
+        productId: "product-1",
+        productName: "علبة علك",
+        purchasedQuantity: 2,
+        unitName: "كارتون",
+        conversionFactor: 24,
+        costPerPurchasedUnit: 36,
+      },
+      "user-1",
+    );
+    expect(rpcSpy).toHaveBeenCalledWith("receive_product_stock", {
+      p_product_id: "product-1",
+      p_added_base_units: 48,
+      p_unit_base_cost: 1.5,
+    });
+  });
+
+  it("throws a friendly Arabic error when the RPC returns no rows", async () => {
+    const { supabase } = createFakeSupabaseForReceiveStock({ rpcData: [] });
+    await expect(
+      recordStockPurchase(
+        supabase,
+        {
+          productId: "product-1",
+          productName: "علبة علك",
+          purchasedQuantity: 10,
+          unitName: null,
+          conversionFactor: 1,
+          costPerPurchasedUnit: 1.5,
+        },
+        "user-1",
+      ),
+    ).rejects.toThrow("تعذر استلام المخزون");
   });
 });

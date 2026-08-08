@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { PackagePlus } from "lucide-react";
 import type { Product } from "@/types/product";
 import { isLowStock } from "@/types/product";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
+import { isAdminRole } from "@/lib/employees/adminCheck";
 import { ConfirmInline } from "@/components/ui/ConfirmInline";
 import { Card } from "@/components/ui/Card";
 
@@ -12,9 +15,11 @@ interface StockTableProps {
   products: Product[];
   onEdit: (product: Product) => void;
   onDelete: (product: Product) => void;
+  onReceiveStock: (product: Product) => void;
 }
 
-export function StockTable({ products, onEdit, onDelete }: StockTableProps) {
+export function StockTable({ products, onEdit, onDelete, onReceiveStock }: StockTableProps) {
+  const { role } = useAuth();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   if (products.length === 0) {
@@ -49,6 +54,17 @@ export function StockTable({ products, onEdit, onDelete }: StockTableProps) {
                 </span>
               </div>
               <div className="flex items-center gap-3 pt-1">
+                {isAdminRole(role) ? (
+                  <button
+                    type="button"
+                    onClick={() => onReceiveStock(product)}
+                    aria-label="استلام مخزون"
+                    className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-emerald-700 hover:bg-emerald-50"
+                  >
+                    <PackagePlus className="h-4 w-4" />
+                    استلام
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => onEdit(product)}

@@ -14,7 +14,8 @@ export type OperationActionType =
   | "category_created"
   | "category_updated"
   | "category_deleted"
-  | "stock_adjusted";
+  | "stock_adjusted"
+  | "stock_received";
 export type OperationEntityType = "product" | "category" | "sale" | "stock";
 
 export interface Database {
@@ -324,6 +325,10 @@ export interface Database {
     Functions: {
       adjust_product_stock: {
         Args: { p_product_id: string; p_delta: number };
+        Returns: Database["public"]["Tables"]["products"]["Row"][];
+      };
+      receive_product_stock: {
+        Args: { p_product_id: string; p_added_base_units: number; p_unit_base_cost: number };
         Returns: Database["public"]["Tables"]["products"]["Row"][];
       };
     };

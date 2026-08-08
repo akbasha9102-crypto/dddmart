@@ -3,10 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { listProducts, listProductsWithCategory, getLowStockProducts, deleteProduct } from "@/services/products.service";
+import {
+  listProducts,
+  listProductsWithCategory,
+  getLowStockProducts,
+  deleteProduct,
+  listProductUnits,
+} from "@/services/products.service";
 import { listCategories } from "@/services/categories.service";
 import { useAuth } from "@/context/AuthContext";
-import type { Product, ProductWithCategory, Category } from "@/types/product";
+import type { Product, ProductWithCategory, Category, ProductUnit } from "@/types/product";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -16,6 +22,7 @@ import { CategoryProductList } from "@/components/features/inventory/CategoryPro
 import { ProductForm } from "@/components/features/inventory/ProductForm";
 import { CategoryForm } from "@/components/features/inventory/CategoryForm";
 import { CategoryManageSheet } from "@/components/features/inventory/CategoryManageSheet";
+import { ReceiveStockForm } from "@/components/features/inventory/ReceiveStockForm";
 
 export default function InventoryPage() {
   const { user } = useAuth();
@@ -31,6 +38,8 @@ export default function InventoryPage() {
   const [isCategoryFormOpen, setIsCategoryFormOpen] = useState(false);
   const [isCategoryManageOpen, setIsCategoryManageOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [receivingStockFor, setReceivingStockFor] = useState<Product | ProductWithCategory | null>(null);
+  const [receivingStockUnits, setReceivingStockUnits] = useState<ProductUnit[]>([]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -72,6 +81,17 @@ export default function InventoryPage() {
 
   function handleSaved() {
     setIsFormOpen(false);
+    void loadData();
+  }
+
+  async function openReceiveStockForm(product: Product | ProductWithCategory) {
+    const supabase = createClient();
+    setReceivingStockUnits(await listProductUnits(supabase, product.id));
+    setReceivingStockFor(product);
+  }
+
+  function handleStockReceived() {
+    setReceivingStockFor(null);
     void loadData();
   }
 
@@ -134,10 +154,16 @@ export default function InventoryPage() {
               categories={categories}
               onEdit={openEditForm}
               onDelete={handleDeleteProduct}
+              onReceiveStock={openReceiveStockForm}
             />
           </div>
           <Card className="hidden overflow-hidden p-0 md:block">
-            <StockTable products={filteredProducts} onEdit={openEditForm} onDelete={handleDeleteProduct} />
+            <StockTable
+              products={filteredProducts}
+              onEdit={openEditForm}
+              onDelete={handleDeleteProduct}
+              onReceiveStock={openReceiveStockForm}
+            />
           </Card>
         </>
       )}
@@ -189,6 +215,17 @@ export default function InventoryPage() {
 
       <Modal open={isCategoryFormOpen} onClose={() => setIsCategoryFormOpen(false)} title="قسم جديد">
         <CategoryForm category={null} onSaved={handleCategorySaved} onCancel={() => setIsCategoryFormOpen(false)} />
+      </Modal>
+
+      <Modal open={receivingStockFor !== null} onClose={() => setReceivingStockFor(null)} title="استلام مخزون">
+        {receivingStockFor ? (
+          <ReceiveStockForm
+            product={receivingStockFor}
+            units={receivingStockUnits}
+            onSaved={handleStockReceived}
+            onCancel={() => setReceivingStockFor(null)}
+          />
+        ) : null}
       </Modal>
 
       {isCategoryManageOpen ? (
