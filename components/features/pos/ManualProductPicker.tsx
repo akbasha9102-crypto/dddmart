@@ -95,11 +95,11 @@ export function ManualProductPicker({ products, categories, onAdd }: ManualProdu
                   : "bg-gray-50 hover:bg-gray-100",
             )}
           >
-            <span className="font-medium text-gray-900">{product.name}</span>
+            <span className="flex-1 truncate font-medium text-gray-900">{product.name}</span>
             {product.quantity <= 0 ? (
-              <span className="text-sm font-semibold text-red-600">غير متوفر</span>
+              <span className="shrink-0 text-sm font-semibold text-red-600">غير متوفر</span>
             ) : (
-              <span className="text-sm text-gray-500">
+              <span className="shrink-0 text-sm text-gray-500">
                 {formatCurrency(product.sale_price)} · متوفر {product.quantity}
               </span>
             )}

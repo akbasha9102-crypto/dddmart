@@ -15,7 +15,7 @@ export function ReceiptPrinter({ receipt, onClose }: ReceiptPrinterProps) {
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <div id="receipt" className="w-[80mm] bg-white p-3 font-mono text-xs text-black">
+      <div id="receipt" className="w-[80mm] max-w-full bg-white p-3 font-mono text-xs text-black">
         <div className="text-center">
           <p className="text-base font-bold">DDD Mart</p>
           <p>فاتورة بيع نقدي</p>

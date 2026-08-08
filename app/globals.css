@@ -12,6 +12,7 @@ html {
 
 body {
   @apply bg-gray-50 text-gray-900 antialiased;
+  overflow-x: hidden;
 }
 
 /* Thermal receipt printing: hide the app chrome and print only #receipt. */

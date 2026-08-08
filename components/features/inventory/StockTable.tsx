@@ -38,8 +38,8 @@ export function StockTable({ products, onEdit, onDelete }: StockTableProps) {
           ) : (
             <div className="flex flex-col gap-2">
               <div className="flex items-start justify-between gap-2">
-                <span className="font-medium text-gray-900">{product.name}</span>
-                <span className="font-mono text-sm text-gray-500">{product.barcode}</span>
+                <span className="min-w-0 flex-1 truncate font-medium text-gray-900">{product.name}</span>
+                <span className="shrink-0 font-mono text-sm text-gray-500">{product.barcode}</span>
               </div>
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="text-gray-600">{formatCurrency(product.sale_price)}</span>
