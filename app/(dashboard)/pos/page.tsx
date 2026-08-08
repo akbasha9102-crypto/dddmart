@@ -51,6 +51,7 @@ export default function POSPage() {
 
   const [activeView, setActiveView] = useState<POSView>("cashier");
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isDiscountOpen, setIsDiscountOpen] = useState(false);
   const [paidAmount, setPaidAmount] = useState("");
   const [heldCount, setHeldCount] = useState(0);
   const [isHoldNoteOpen, setIsHoldNoteOpen] = useState(false);
@@ -135,8 +136,7 @@ export default function POSPage() {
     <div className="-m-3 flex h-[calc(100vh-4rem-4.25rem)] flex-col overflow-hidden bg-gray-50 lg:-m-6 lg:h-[calc(100vh-4rem)]">
       <header className="shrink-0 border-b border-gray-200 bg-white px-3 py-2">
         <div className="flex items-center justify-between gap-2">
-          <h1 className="shrink-0 text-base font-bold text-brand-700">شاشة الكاشير</h1>
-          <div role="tablist" className="flex flex-1 max-w-xs items-center gap-1 rounded-full bg-gray-100 p-1">
+          <div role="tablist" className="flex flex-1 items-center gap-1 rounded-full bg-gray-100 p-1">
             {POS_VIEWS.map((view) => (
               <button
                 key={view.value}
@@ -177,47 +177,49 @@ export default function POSPage() {
         {activeView === "cashier" ? (
           <>
             <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
-              <div className="border-b border-gray-100 bg-white p-3">
+              <div className="shrink-0 border-b border-gray-100 bg-white p-3">
                 <BarcodeScanner />
               </div>
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+              <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-40 lg:pb-3">
                 <CartGrid />
               </div>
             </section>
 
-            <aside className="flex w-full shrink-0 flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 lg:w-80">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between text-sm text-gray-500">
-                  <span>المجموع الفرعي</span>
-                  <span className="font-medium text-gray-700">{formatCurrency(totals.subtotal)}</span>
+            <aside
+              className="fixed inset-x-0 bottom-16 z-40 flex shrink-0 flex-col gap-2 border-t border-gray-200 bg-white p-3 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] lg:static lg:inset-auto lg:w-80 lg:flex-col lg:gap-3 lg:rounded-xl lg:border lg:shadow-none lg:p-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-baseline gap-2 text-sm text-gray-500">
+                  <span className="shrink-0">الإجمالي</span>
+                  <span className="truncate text-xl font-bold text-brand-700 lg:text-2xl">
+                    {formatCurrency(totals.totalAmount)}
+                  </span>
                 </div>
-                <Input
-                  type="number"
-                  label="الخصم"
-                  min={0}
-                  value={discountAmount || ""}
-                  onChange={(event) => setDiscountAmount(Number(event.target.value) || 0)}
-                />
+                <button
+                  type="button"
+                  onClick={() => setIsDiscountOpen(true)}
+                  className={cn(
+                    "shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
+                    discountAmount > 0
+                      ? "border-brand-300 bg-brand-50 text-brand-700"
+                      : "border-gray-300 text-gray-600",
+                  )}
+                >
+                  {discountAmount > 0 ? `خصم ${formatCurrency(discountAmount)}` : "خصم"}
+                </button>
               </div>
 
-              <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-600">الإجمالي</span>
-                  <span className="text-2xl font-bold text-brand-700">{formatCurrency(totals.totalAmount)}</span>
-                </div>
+              <Button size="xl" className="w-full" disabled={items.length === 0} onClick={openCheckout}>
+                دفع
+              </Button>
 
-                <Button size="xl" className="w-full" disabled={items.length === 0} onClick={openCheckout}>
-                  دفع
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" className="flex-1" disabled={items.length === 0} onClick={openHoldModal}>
+                  تعليق
                 </Button>
-
-                <div className="flex gap-2">
-                  <Button variant="secondary" className="flex-1" disabled={items.length === 0} onClick={openHoldModal}>
-                    تعليق
-                  </Button>
-                  <Button variant="ghost" className="flex-1" disabled={items.length === 0} onClick={clear}>
-                    تفريغ السلة
-                  </Button>
-                </div>
+                <Button variant="ghost" size="sm" className="flex-1" disabled={items.length === 0} onClick={clear}>
+                  تفريغ السلة
+                </Button>
               </div>
             </aside>
           </>
@@ -301,6 +303,20 @@ export default function POSPage() {
 
       <Modal open={lastReceipt !== null} onClose={dismissReceipt} title="تمت عملية البيع">
         {lastReceipt ? <ReceiptPrinter receipt={lastReceipt} onClose={dismissReceipt} /> : null}
+      </Modal>
+
+      <Modal open={isDiscountOpen} onClose={() => setIsDiscountOpen(false)} title="الخصم">
+        <div className="flex flex-col gap-4">
+          <Input
+            type="number"
+            label="مبلغ الخصم"
+            min={0}
+            autoFocus
+            value={discountAmount || ""}
+            onChange={(event) => setDiscountAmount(Number(event.target.value) || 0)}
+          />
+          <Button size="lg" onClick={() => setIsDiscountOpen(false)}>تم</Button>
+        </div>
       </Modal>
 
       <Modal open={isHoldNoteOpen} onClose={() => setIsHoldNoteOpen(false)} title="تعليق الفاتورة">
