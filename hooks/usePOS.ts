@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { playScanBeep, playSuccessChime } from "@/lib/audio/posSounds";
 import { decrementStock, incrementStock, resolveBarcode } from "@/services/products.service";
 import { createSale } from "@/services/sales.service";
 import { holdSale, resumeHeldSale } from "@/services/heldSales.service";
@@ -48,6 +49,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
           return;
         }
         cart.addItem(unit ? productUnitToCartItem(updated, unit, quantity) : productToCartItem(updated, quantity));
+        playScanBeep();
         return;
       }
 
@@ -58,6 +60,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
         return;
       }
       cart.addItem(unit ? productUnitToCartItem(updated, unit, quantity) : productToCartItem(updated, quantity));
+      playScanBeep();
     },
     [cart, isOnline],
   );
@@ -263,6 +266,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
           };
 
           setLastReceipt(result);
+          playSuccessChime();
           cart.clear();
           return result;
         }
@@ -281,6 +285,7 @@ export function usePOS({ cashierId }: UsePOSOptions) {
           customerName: paymentMethod === "credit" ? customerName : undefined,
         };
         setLastReceipt(resultWithCustomerName);
+        playSuccessChime();
         cart.clear();
         return resultWithCustomerName;
       } finally {

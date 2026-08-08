@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Volume2, VolumeX } from "lucide-react";
 import { usePOSContext } from "@/context/POSContext";
+import { useSoundSettings } from "@/hooks/useSoundSettings";
 import { BarcodeScanner } from "@/components/features/pos/BarcodeScanner";
 import { CartGrid } from "@/components/features/pos/CartGrid";
 import { ReceiptPrinter } from "@/components/features/pos/ReceiptPrinter";
@@ -58,6 +60,8 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithBalance | null>(null);
   const [overLimitWarning, setOverLimitWarning] = useState<string | null>(null);
+
+  const { isMuted, toggle: toggleMuted } = useSoundSettings();
 
   useEffect(() => {
     const supabase = createClient();
@@ -154,6 +158,14 @@ export default function POSPage() {
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={toggleMuted}
+            aria-label={isMuted ? "تفعيل الصوت" : "كتم الصوت"}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100"
+          >
+            {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          </button>
         </div>
       </header>
 
