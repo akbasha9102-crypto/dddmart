@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PackagePlus, PackageX, Pencil, Trash2 } from "lucide-react";
+import { PackagePlus, PackageX, ClipboardCheck, Pencil, Trash2 } from "lucide-react";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { isLowStock } from "@/types/product";
 import { cn } from "@/lib/utils";
@@ -18,10 +18,19 @@ interface CategoryProductListProps {
   onDelete: (product: ProductWithCategory) => void;
   onReceiveStock: (product: ProductWithCategory) => void;
   onDamageStock: (product: ProductWithCategory) => void;
+  onReconcileStock: (product: ProductWithCategory) => void;
 }
 
 /** Mobile-first grouped product list — horizontal category tabs + active panel. Primary product-management surface on mobile, so edit/delete live here too. */
-export function CategoryProductList({ products, categories, onEdit, onDelete, onReceiveStock, onDamageStock }: CategoryProductListProps) {
+export function CategoryProductList({
+  products,
+  categories,
+  onEdit,
+  onDelete,
+  onReceiveStock,
+  onDamageStock,
+  onReconcileStock,
+}: CategoryProductListProps) {
   const groups = useMemo(() => groupProductsByCategory(products, categories), [products, categories]);
 
   const [activeId, setActiveId] = useState<string | null>(groups[0]?.id ?? null);
@@ -74,6 +83,7 @@ export function CategoryProductList({ products, categories, onEdit, onDelete, on
               onDelete={onDelete}
               onReceiveStock={onReceiveStock}
               onDamageStock={onDamageStock}
+              onReconcileStock={onReconcileStock}
             />
           ))
         )}
@@ -88,12 +98,14 @@ function ProductRow({
   onDelete,
   onReceiveStock,
   onDamageStock,
+  onReconcileStock,
 }: {
   product: ProductWithCategory;
   onEdit: (product: ProductWithCategory) => void;
   onDelete: (product: ProductWithCategory) => void;
   onReceiveStock: (product: ProductWithCategory) => void;
   onDamageStock: (product: ProductWithCategory) => void;
+  onReconcileStock: (product: ProductWithCategory) => void;
 }) {
   const { role } = useAuth();
   const [confirming, setConfirming] = useState(false);
@@ -138,6 +150,16 @@ function ProductRow({
             aria-label="تسجيل تلف"
           >
             <PackageX className="h-4 w-4" />
+          </button>
+        ) : null}
+        {isAdminRole(role) ? (
+          <button
+            type="button"
+            onClick={() => onReconcileStock(product)}
+            className="rounded-md p-1.5 text-gray-500 hover:bg-indigo-100 hover:text-indigo-700"
+            aria-label="تسوية المخزون"
+          >
+            <ClipboardCheck className="h-4 w-4" />
           </button>
         ) : null}
         <button

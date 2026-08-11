@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PackagePlus, PackageX } from "lucide-react";
+import { PackagePlus, PackageX, ClipboardCheck } from "lucide-react";
 import type { Product } from "@/types/product";
 import { isLowStock } from "@/types/product";
 import { formatCurrency } from "@/lib/utils";
@@ -17,9 +17,10 @@ interface StockTableProps {
   onDelete: (product: Product) => void;
   onReceiveStock: (product: Product) => void;
   onDamageStock: (product: Product) => void;
+  onReconcileStock: (product: Product) => void;
 }
 
-export function StockTable({ products, onEdit, onDelete, onReceiveStock, onDamageStock }: StockTableProps) {
+export function StockTable({ products, onEdit, onDelete, onReceiveStock, onDamageStock, onReconcileStock }: StockTableProps) {
   const { role } = useAuth();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
@@ -75,6 +76,17 @@ export function StockTable({ products, onEdit, onDelete, onReceiveStock, onDamag
                   >
                     <PackageX className="h-4 w-4" />
                     تالف
+                  </button>
+                ) : null}
+                {isAdminRole(role) ? (
+                  <button
+                    type="button"
+                    onClick={() => onReconcileStock(product)}
+                    aria-label="تسوية المخزون"
+                    className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-indigo-700 hover:bg-indigo-50"
+                  >
+                    <ClipboardCheck className="h-4 w-4" />
+                    تسوية
                   </button>
                 ) : null}
                 <button
