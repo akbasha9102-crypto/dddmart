@@ -10,7 +10,9 @@ import type { StockDamage } from "@/types/returns";
  * Hand-rolled fake Supabase covering exactly the chains getDailySalesSummary
  * exercises: sales.select().gte().lte().order(), sale_items.select().in(),
  * returns.select().gte().lte() (+ a follow-up sale_items.select().in("id",...)
- * for the referenced lines), and stock_damages.select().gte().lte(). Table
+ * for the referenced lines), stock_damages.select().gte().lte(), and
+ * stock_reconciliations.select().gte().lte() (always empty here — reconciliation
+ * netting itself is covered by sales.service.reconciliation.test.ts). Table
  * dispatch is by name; every chain resolves to a plain data/error object,
  * filtered in-memory by the fixture data passed in — deliberately minimal,
  * matching the other fakes in this repo (see products.service.test.ts).
@@ -66,6 +68,15 @@ function createFakeSupabase(fixtures: {
           select: () => ({
             gte: () => ({
               lte: async () => ({ data: fixtures.damages, error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === "stock_reconciliations") {
+        return {
+          select: () => ({
+            gte: () => ({
+              lte: async () => ({ data: [], error: null }),
             }),
           }),
         };

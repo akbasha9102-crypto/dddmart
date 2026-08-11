@@ -135,6 +135,29 @@ function sumLossAmount(damages: DamageForReporting[]): number {
   return damages.reduce((sum, row) => sum + row.loss_amount, 0);
 }
 
+interface ReconciliationForReporting {
+  product_id: string | null;
+  product_name: string;
+  loss_value: number;
+  created_at: string;
+}
+
+/** Fetches stock_reconciliations whose `created_at` falls in range. loss_value is 0 for overage rows, so summing needs no separate filter. */
+async function getReconciliationLossInRange(supabase: Client, startDate: Date, endDate: Date): Promise<ReconciliationForReporting[]> {
+  const { data, error } = await supabase
+    .from("stock_reconciliations")
+    .select("product_id, product_name, loss_value, created_at")
+    .gte("created_at", startDate.toISOString())
+    .lte("created_at", endDate.toISOString());
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+function sumReconciliationLoss(reconciliations: ReconciliationForReporting[]): number {
+  return reconciliations.reduce((sum, row) => sum + row.loss_value, 0);
+}
+
 /** Start/end-of-day bounds for a single calendar date, matching getDailySales'/getDayTotals' existing convention. */
 function dayBounds(date: Date): { dayStart: Date; dayEnd: Date } {
   const dayStart = new Date(date);
@@ -271,12 +294,14 @@ export interface DailySalesSummary {
   salesCount: number;
   /** Nets against returns.refund_amount for the day (see totalReturnsValue). */
   totalRevenue: number;
-  /** grossProfit - returnsProfitReversal - totalDamageLoss (see services/sales.service.ts module doc / plan). */
+  /** grossProfit - returnsProfitReversal - totalDamageLoss - totalReconciliationLoss (see services/sales.service.ts module doc / plan). */
   totalProfit: number;
   /** sum(returns.refund_amount) for returns whose created_at falls on this day — also already netted into totalRevenue. */
   totalReturnsValue: number;
   /** sum(stock_damages.loss_amount) for damages whose created_at falls on this day — also already subtracted from totalProfit. */
   totalDamageLoss: number;
+  /** sum(stock_reconciliations.loss_value) for reconciliations whose created_at falls on this day — also already subtracted from totalProfit. Only shortages contribute; overages are 0. */
+  totalReconciliationLoss: number;
 }
 
 /**
@@ -296,21 +321,31 @@ export async function getDailySalesSummary(supabase: Client, date: Date): Promis
   const sales = await getDailySales(supabase, date);
   const { dayStart, dayEnd } = dayBounds(date);
 
-  const [grossProfit, { returns, saleItemById }, damages] = await Promise.all([
+  const [grossProfit, { returns, saleItemById }, damages, reconciliations] = await Promise.all([
     computeProfitForSales(supabase, sales),
     getReturnsInRange(supabase, dayStart, dayEnd),
     getDamagesInRange(supabase, dayStart, dayEnd),
+    getReconciliationLossInRange(supabase, dayStart, dayEnd),
   ]);
 
   const returnsProfitReversal = computeReturnsProfitReversal(returns, saleItemById);
   const totalReturnsValue = sumRefundAmount(returns);
   const totalDamageLoss = sumLossAmount(damages);
+  const totalReconciliationLoss = sumReconciliationLoss(reconciliations);
 
   const grossRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
   const totalRevenue = grossRevenue - totalReturnsValue;
-  const totalProfit = grossProfit - returnsProfitReversal - totalDamageLoss;
+  const totalProfit = grossProfit - returnsProfitReversal - totalDamageLoss - totalReconciliationLoss;
 
-  return { sales, salesCount: sales.length, totalRevenue, totalProfit, totalReturnsValue, totalDamageLoss };
+  return {
+    sales,
+    salesCount: sales.length,
+    totalRevenue,
+    totalProfit,
+    totalReturnsValue,
+    totalDamageLoss,
+    totalReconciliationLoss,
+  };
 }
 
 /** Shared helper: fetches sale_items for a set of sales and sums profit from each row's own snapshotted cost_price. */
@@ -363,6 +398,8 @@ export interface DailyReportDetails {
   totalReturnsValue: number;
   /** sum(stock_damages.loss_amount) for damages whose created_at falls on this day — also already subtracted from totalProfit. */
   totalDamageLoss: number;
+  /** sum(stock_reconciliations.loss_value) for reconciliations whose created_at falls on this day — also already subtracted from totalProfit. Only shortages contribute; overages are 0. */
+  totalReconciliationLoss: number;
   hourlyBreakdown: HourlyBucket[];
   comparisonWithYesterday: PeriodComparison;
   comparisonWithLastWeekSameDay: PeriodComparison;
@@ -420,10 +457,11 @@ export async function getDailyReportDetails(supabase: Client, date: Date): Promi
   const lastWeekSameDay = new Date(dateKey);
   lastWeekSameDay.setDate(lastWeekSameDay.getDate() - 7);
 
-  const [grossProfit, { returns, saleItemById }, damages, yesterdayTotals, lastWeekTotals] = await Promise.all([
+  const [grossProfit, { returns, saleItemById }, damages, reconciliations, yesterdayTotals, lastWeekTotals] = await Promise.all([
     computeProfitForSales(supabase, sales),
     getReturnsInRange(supabase, dayStart, dayEnd),
     getDamagesInRange(supabase, dayStart, dayEnd),
+    getReconciliationLossInRange(supabase, dayStart, dayEnd),
     getDayTotals(supabase, yesterday),
     getDayTotals(supabase, lastWeekSameDay),
   ]);
@@ -431,10 +469,11 @@ export async function getDailyReportDetails(supabase: Client, date: Date): Promi
   const returnsProfitReversal = computeReturnsProfitReversal(returns, saleItemById);
   const totalReturnsValue = sumRefundAmount(returns);
   const totalDamageLoss = sumLossAmount(damages);
+  const totalReconciliationLoss = sumReconciliationLoss(reconciliations);
 
   const grossRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
   const totalRevenue = grossRevenue - totalReturnsValue;
-  const totalProfit = grossProfit - returnsProfitReversal - totalDamageLoss;
+  const totalProfit = grossProfit - returnsProfitReversal - totalDamageLoss - totalReconciliationLoss;
   const totalDiscountGiven = sales.reduce((sum, sale) => sum + sale.discount_amount, 0);
   const averageInvoiceValue = sales.length > 0 ? totalRevenue / sales.length : 0;
 
@@ -484,6 +523,7 @@ export async function getDailyReportDetails(supabase: Client, date: Date): Promi
     totalItemsSold,
     totalReturnsValue,
     totalDamageLoss,
+    totalReconciliationLoss,
     hourlyBreakdown,
     comparisonWithYesterday: buildComparison({ revenue: totalRevenue, count: sales.length }, yesterdayTotals),
     comparisonWithLastWeekSameDay: buildComparison({ revenue: totalRevenue, count: sales.length }, lastWeekTotals),
@@ -494,7 +534,7 @@ export interface DailySalesPoint {
   date: string;
   /** Nets against that day's returns.refund_amount (see totalReturnsValue). */
   totalRevenue: number;
-  /** grossProfit - returnsProfitReversal - totalDamageLoss for this day — see getDailySalesSummary. */
+  /** grossProfit - returnsProfitReversal - totalDamageLoss - totalReconciliationLoss for this day — see getDailySalesSummary. */
   totalProfit: number;
   salesCount: number;
   averageInvoiceValue: number;
@@ -502,6 +542,8 @@ export interface DailySalesPoint {
   totalReturnsValue: number;
   /** sum(stock_damages.loss_amount) whose created_at falls on this day — also already subtracted from totalProfit. */
   totalDamageLoss: number;
+  /** sum(stock_reconciliations.loss_value) whose created_at falls on this day — also already subtracted from totalProfit. Only shortages contribute; overages are 0. */
+  totalReconciliationLoss: number;
 }
 
 export type SalesTrendRange = { days: number } | { startDate: Date; endDate: Date };
@@ -537,7 +579,7 @@ export async function getSalesTrend(supabase: Client, range: SalesTrendRange): P
   const { startDate, endDate } = resolveTrendRange(range);
   assertRangeWithinLimit(startDate, endDate);
 
-  const [{ data: sales, error }, { returns, saleItemById }, damages] = await Promise.all([
+  const [{ data: sales, error }, { returns, saleItemById }, damages, reconciliations] = await Promise.all([
     supabase
       .from("sales")
       .select("id, created_at, total_amount")
@@ -545,6 +587,7 @@ export async function getSalesTrend(supabase: Client, range: SalesTrendRange): P
       .lte("created_at", endDate.toISOString()),
     getReturnsInRange(supabase, startDate, endDate),
     getDamagesInRange(supabase, startDate, endDate),
+    getReconciliationLossInRange(supabase, startDate, endDate),
   ]);
 
   if (error) throw error;
@@ -576,6 +619,7 @@ export async function getSalesTrend(supabase: Client, range: SalesTrendRange): P
     returnsProfitReversal: number;
     totalReturnsValue: number;
     totalDamageLoss: number;
+    totalReconciliationLoss: number;
   }
 
   const emptyBucket = (): Bucket => ({
@@ -585,6 +629,7 @@ export async function getSalesTrend(supabase: Client, range: SalesTrendRange): P
     returnsProfitReversal: 0,
     totalReturnsValue: 0,
     totalDamageLoss: 0,
+    totalReconciliationLoss: 0,
   });
 
   const byDate = new Map<string, Bucket>();
@@ -613,13 +658,20 @@ export async function getSalesTrend(supabase: Client, range: SalesTrendRange): P
     byDate.set(dayKey, bucket);
   });
 
+  reconciliations.forEach((row) => {
+    const dayKey = dayKeyOf(row.created_at);
+    const bucket = byDate.get(dayKey) ?? emptyBucket();
+    bucket.totalReconciliationLoss += row.loss_value;
+    byDate.set(dayKey, bucket);
+  });
+
   const points: DailySalesPoint[] = [];
   const cursor = new Date(startDate);
   while (cursor <= endDate) {
     const dayKey = dayKeyOf(cursor);
     const bucket = byDate.get(dayKey) ?? emptyBucket();
     const totalRevenue = bucket.grossRevenue - bucket.totalReturnsValue;
-    const totalProfit = bucket.grossProfit - bucket.returnsProfitReversal - bucket.totalDamageLoss;
+    const totalProfit = bucket.grossProfit - bucket.returnsProfitReversal - bucket.totalDamageLoss - bucket.totalReconciliationLoss;
     points.push({
       date: dayKey,
       totalRevenue,
@@ -628,6 +680,7 @@ export async function getSalesTrend(supabase: Client, range: SalesTrendRange): P
       averageInvoiceValue: bucket.salesCount > 0 ? totalRevenue / bucket.salesCount : 0,
       totalReturnsValue: bucket.totalReturnsValue,
       totalDamageLoss: bucket.totalDamageLoss,
+      totalReconciliationLoss: bucket.totalReconciliationLoss,
     });
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -653,6 +706,8 @@ export interface ProductRankingStat {
   totalReturnsValue: number;
   /** sum(stock_damages.loss_amount) for this product in range — already subtracted from totalProfit. */
   totalDamageLoss: number;
+  /** sum(stock_reconciliations.loss_value) for this product in range — already subtracted from totalProfit. Only shortages contribute; overages are 0. */
+  totalReconciliationLoss: number;
 }
 
 const UNCATEGORIZED_LABEL = "أخرى";
@@ -690,8 +745,9 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
 
   const { returns, saleItemById } = await getReturnsInRange(supabase, startDate, endDate);
   const damages = await getDamagesInRange(supabase, startDate, endDate);
+  const reconciliations = await getReconciliationLossInRange(supabase, startDate, endDate);
 
-  if ((!sales || sales.length === 0) && returns.length === 0 && damages.length === 0) return [];
+  if ((!sales || sales.length === 0) && returns.length === 0 && damages.length === 0 && reconciliations.length === 0) return [];
 
   let items: { sale_id: string; product_id: string | null; product_name: string; quantity: number; unit_price: number; total_price: number; cost_price: number }[] = [];
   if (sales && sales.length > 0) {
@@ -708,9 +764,12 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
 
   const productIds = Array.from(
     new Set(
-      [...items.map((item) => item.product_id), ...returns.map((row) => row.product_id), ...damages.map((row) => row.product_id)].filter(
-        (id): id is string => id !== null,
-      ),
+      [
+        ...items.map((item) => item.product_id),
+        ...returns.map((row) => row.product_id),
+        ...damages.map((row) => row.product_id),
+        ...reconciliations.map((row) => row.product_id),
+      ].filter((id): id is string => id !== null),
     ),
   );
 
@@ -758,6 +817,7 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
       saleCount: 0,
       totalReturnsValue: 0,
       totalDamageLoss: 0,
+      totalReconciliationLoss: 0,
       saleIds: new Set(),
     };
     byKey.set(key, created);
@@ -796,6 +856,15 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
     bucket.totalProfit -= row.loss_amount;
   });
 
+  reconciliations.forEach((row) => {
+    const key = productRankingKey(row.product_id, row.product_name);
+    const info = row.product_id ? productInfoById.get(row.product_id) : undefined;
+    const categoryId = info?.categoryId ?? null;
+    const bucket = ensureBucket(key, row.product_id, row.product_name, categoryId);
+    bucket.totalReconciliationLoss += row.loss_value;
+    bucket.totalProfit -= row.loss_value;
+  });
+
   const stats = Array.from(byKey.values());
   const grandTotalRevenue = stats.reduce((sum, stat) => sum + stat.totalRevenue, 0);
 
@@ -812,6 +881,7 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
       saleCount: stat.saleIds.size,
       totalReturnsValue: stat.totalReturnsValue,
       totalDamageLoss: stat.totalDamageLoss,
+      totalReconciliationLoss: stat.totalReconciliationLoss,
     }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
 }
@@ -834,6 +904,8 @@ export interface CategoryRankingStat {
   totalReturnsValue: number;
   /** sum(stock_damages.loss_amount) for this category in range — already subtracted from totalProfit. */
   totalDamageLoss: number;
+  /** sum(stock_reconciliations.loss_value) for this category in range — already subtracted from totalProfit. Only shortages contribute; overages are 0. */
+  totalReconciliationLoss: number;
 }
 
 /**
@@ -861,8 +933,9 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
 
   const { returns, saleItemById } = await getReturnsInRange(supabase, startDate, endDate);
   const damages = await getDamagesInRange(supabase, startDate, endDate);
+  const reconciliations = await getReconciliationLossInRange(supabase, startDate, endDate);
 
-  if ((!sales || sales.length === 0) && returns.length === 0 && damages.length === 0) return [];
+  if ((!sales || sales.length === 0) && returns.length === 0 && damages.length === 0 && reconciliations.length === 0) return [];
 
   let items: { sale_id: string; product_id: string | null; quantity: number; unit_price: number; total_price: number; cost_price: number }[] = [];
   if (sales && sales.length > 0) {
@@ -879,9 +952,12 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
 
   const productIds = Array.from(
     new Set(
-      [...items.map((item) => item.product_id), ...returns.map((row) => row.product_id), ...damages.map((row) => row.product_id)].filter(
-        (id): id is string => id !== null,
-      ),
+      [
+        ...items.map((item) => item.product_id),
+        ...returns.map((row) => row.product_id),
+        ...damages.map((row) => row.product_id),
+        ...reconciliations.map((row) => row.product_id),
+      ].filter((id): id is string => id !== null),
     ),
   );
 
@@ -933,6 +1009,7 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
       saleCount: 0,
       totalReturnsValue: 0,
       totalDamageLoss: 0,
+      totalReconciliationLoss: 0,
       saleIds: new Set(),
     };
     byKey.set(key, created);
@@ -968,6 +1045,14 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
     bucket.totalProfit -= row.loss_amount;
   });
 
+  reconciliations.forEach((row) => {
+    const info = row.product_id ? productInfoById.get(row.product_id) : undefined;
+    const categoryId = info?.categoryId ?? null;
+    const bucket = ensureBucket(categoryId);
+    bucket.totalReconciliationLoss += row.loss_value;
+    bucket.totalProfit -= row.loss_value;
+  });
+
   const stats = Array.from(byKey.values());
   const grandTotalRevenue = stats.reduce((sum, stat) => sum + stat.totalRevenue, 0);
 
@@ -984,6 +1069,7 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
       saleCount: stat.saleIds.size,
       totalReturnsValue: stat.totalReturnsValue,
       totalDamageLoss: stat.totalDamageLoss,
+      totalReconciliationLoss: stat.totalReconciliationLoss,
     }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
 }
