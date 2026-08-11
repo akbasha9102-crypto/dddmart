@@ -24,6 +24,7 @@ import { CategoryForm } from "@/components/features/inventory/CategoryForm";
 import { CategoryManageSheet } from "@/components/features/inventory/CategoryManageSheet";
 import { ReceiveStockForm } from "@/components/features/inventory/ReceiveStockForm";
 import { DamageStockForm } from "@/components/features/inventory/DamageStockForm";
+import { StockReconciliationForm } from "@/components/features/inventory/StockReconciliationForm";
 
 export default function InventoryPage() {
   const { user, storeId } = useAuth();
@@ -42,6 +43,7 @@ export default function InventoryPage() {
   const [receivingStockFor, setReceivingStockFor] = useState<Product | ProductWithCategory | null>(null);
   const [receivingStockUnits, setReceivingStockUnits] = useState<ProductUnit[]>([]);
   const [damagingStockFor, setDamagingStockFor] = useState<Product | ProductWithCategory | null>(null);
+  const [reconcilingStockFor, setReconcilingStockFor] = useState<Product | ProductWithCategory | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -100,6 +102,11 @@ export default function InventoryPage() {
 
   function handleStockDamaged() {
     setDamagingStockFor(null);
+    void loadData();
+  }
+
+  function handleStockReconciled() {
+    setReconcilingStockFor(null);
     void loadData();
   }
 
@@ -164,6 +171,7 @@ export default function InventoryPage() {
               onDelete={handleDeleteProduct}
               onReceiveStock={openReceiveStockForm}
               onDamageStock={setDamagingStockFor}
+              onReconcileStock={setReconcilingStockFor}
             />
           </div>
           <Card className="hidden overflow-hidden p-0 md:block">
@@ -173,6 +181,7 @@ export default function InventoryPage() {
               onDelete={handleDeleteProduct}
               onReceiveStock={openReceiveStockForm}
               onDamageStock={setDamagingStockFor}
+              onReconcileStock={setReconcilingStockFor}
             />
           </Card>
         </>
@@ -241,6 +250,16 @@ export default function InventoryPage() {
       <Modal open={damagingStockFor !== null} onClose={() => setDamagingStockFor(null)} title="تسجيل تلف مخزون">
         {damagingStockFor ? (
           <DamageStockForm product={damagingStockFor} onSaved={handleStockDamaged} onCancel={() => setDamagingStockFor(null)} />
+        ) : null}
+      </Modal>
+
+      <Modal open={reconcilingStockFor !== null} onClose={() => setReconcilingStockFor(null)} title="تسوية المخزون">
+        {reconcilingStockFor ? (
+          <StockReconciliationForm
+            product={reconcilingStockFor}
+            onSaved={handleStockReconciled}
+            onCancel={() => setReconcilingStockFor(null)}
+          />
         ) : null}
       </Modal>
 
