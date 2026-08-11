@@ -18,6 +18,7 @@ export type OperationActionType =
   | "stock_received"
   | "return_created"
   | "damage_recorded"
+  | "stock_reconciled"
   | "customer_created"
   | "customer_updated"
   | "customer_archived"
@@ -470,6 +471,69 @@ export interface Database {
           },
           {
             foreignKeyName: "stock_damages_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      stock_reconciliations: {
+        Row: {
+          id: string;
+          product_id: string | null;
+          product_name: string;
+          unit: string;
+          previous_quantity: number;
+          counted_quantity: number;
+          difference: number;
+          cost_price: number;
+          loss_value: number;
+          reason: string | null;
+          actor_id: string | null;
+          store_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id?: string | null;
+          product_name: string;
+          unit: string;
+          previous_quantity: number;
+          counted_quantity: number;
+          difference: number;
+          cost_price: number;
+          loss_value?: number;
+          reason?: string | null;
+          actor_id?: string | null;
+          store_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string | null;
+          product_name?: string;
+          unit?: string;
+          previous_quantity?: number;
+          counted_quantity?: number;
+          difference?: number;
+          cost_price?: number;
+          loss_value?: number;
+          reason?: string | null;
+          actor_id?: string | null;
+          store_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "stock_reconciliations_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "stock_reconciliations_actor_id_fkey";
             columns: ["actor_id"];
             isOneToOne: false;
             referencedRelation: "profiles";

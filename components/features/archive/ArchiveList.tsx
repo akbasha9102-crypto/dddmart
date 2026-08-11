@@ -24,6 +24,7 @@ const ACTION_ICON_MAP: Record<OperationActionType, LucideIcon> = {
   stock_received: PackagePlus,
   return_created: Undo2,
   damage_recorded: PackageX,
+  stock_reconciled: Pencil,
   customer_created: UserPlus,
   customer_updated: Pencil,
   customer_archived: Archive,
