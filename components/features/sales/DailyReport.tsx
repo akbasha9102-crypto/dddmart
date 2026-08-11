@@ -53,6 +53,10 @@ export function DailyReport({ report }: DailyReportProps) {
           <p className="text-sm text-gray-500">إجمالي الخسائر</p>
           <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(report.totalDamageLoss)}</p>
         </Card>
+        <Card>
+          <p className="text-sm text-gray-500">فروقات الجرد</p>
+          <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(report.totalReconciliationLoss)}</p>
+        </Card>
         {report.highestInvoice ? (
           <Card>
             <p className="text-sm text-gray-500">أعلى فاتورة</p>
