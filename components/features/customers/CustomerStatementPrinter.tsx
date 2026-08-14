@@ -3,6 +3,7 @@
 import type { Customer, CustomerTransaction } from "@/types/customer";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { useStoreProfile } from "@/hooks/useStoreProfile";
 
 interface CustomerStatementPrinterProps {
   customer: Customer;
@@ -22,6 +23,7 @@ interface CustomerStatementPrinterProps {
  * latent constraint if the two are ever combined into one view later.
  */
 export function CustomerStatementPrinter({ customer, transactions, balance, onClose }: CustomerStatementPrinterProps) {
+  const { store } = useStoreProfile();
   // Statement is chronological oldest-first, unlike CustomerDetail's newest-first history list.
   const chronological = [...transactions].reverse();
 
@@ -35,7 +37,9 @@ export function CustomerStatementPrinter({ customer, transactions, balance, onCl
     <div className="flex flex-col items-center gap-4">
       <div id="receipt" className="w-[80mm] max-w-full bg-white p-3 font-mono text-xs text-black">
         <div className="text-center">
-          <p className="text-base font-bold">DDD Mart</p>
+          <p className="text-base font-bold">{store?.name ?? "DDD Mart"}</p>
+          {store?.phone ? <p>{store.phone}</p> : null}
+          {store?.address ? <p>{store.address}</p> : null}
           <p>كشف حساب</p>
         </div>
         <hr className="my-2 border-dashed border-black" />

@@ -3,6 +3,7 @@
 import type { CompletedSale } from "@/types/pos";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { useStoreProfile } from "@/hooks/useStoreProfile";
 
 interface ReceiptPrinterProps {
   receipt: CompletedSale;
@@ -11,6 +12,7 @@ interface ReceiptPrinterProps {
 
 /** 80mm-wide thermal receipt. Only #receipt is visible when printing — see app/globals.css. */
 export function ReceiptPrinter({ receipt, onClose }: ReceiptPrinterProps) {
+  const { store } = useStoreProfile();
   const { sale, items, changeAmount, customerName } = receipt;
   const isCredit = sale.payment_method === "credit";
 
@@ -18,7 +20,9 @@ export function ReceiptPrinter({ receipt, onClose }: ReceiptPrinterProps) {
     <div className="flex flex-col items-center gap-4">
       <div id="receipt" className="w-[80mm] max-w-full bg-white p-3 font-mono text-xs text-black">
         <div className="text-center">
-          <p className="text-base font-bold">DDD Mart</p>
+          <p className="text-base font-bold">{store?.name ?? "DDD Mart"}</p>
+          {store?.phone ? <p>{store.phone}</p> : null}
+          {store?.address ? <p>{store.address}</p> : null}
           <p>{isCredit ? "فاتورة بيع بالآجل" : "فاتورة بيع نقدي"}</p>
         </div>
         <hr className="my-2 border-dashed border-black" />
