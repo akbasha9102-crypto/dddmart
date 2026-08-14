@@ -32,6 +32,14 @@ function rangeForPreset(days: PresetDays): CustomRange {
   return { startDate: toDateInputValue(start), endDate: toDateInputValue(end) };
 }
 
+export function toExportRange(range: CustomRange): { startDate: Date; endDate: Date } {
+  const startDate = new Date(range.startDate);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(range.endDate);
+  endDate.setHours(23, 59, 59, 999);
+  return { startDate, endDate };
+}
+
 function toSheetRow(row: SalesExportRow) {
   return {
     "رقم الفاتورة": row.invoiceNumber,
@@ -72,8 +80,7 @@ export function SalesExportModal({ open, onClose }: SalesExportModalProps) {
     setIsExporting(true);
     try {
       const supabase = createClient();
-      const startDate = new Date(customRange.startDate);
-      const endDate = new Date(customRange.endDate);
+      const { startDate, endDate } = toExportRange(customRange);
       const rows = await getSalesForExport(supabase, startDate, endDate);
 
       if (rows.length === 0) {
