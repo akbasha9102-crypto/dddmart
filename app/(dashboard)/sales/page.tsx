@@ -11,7 +11,9 @@ import { RangeDatePicker } from "@/components/features/sales/RangeDatePicker";
 import type { CustomRange, PresetDays } from "@/components/features/sales/RangeDatePicker";
 import { Tabs } from "@/components/ui/Tabs";
 import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
 import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
+import { SalesExportModal } from "@/components/features/sales/SalesExportModal";
 
 type PageTab = "today" | "trend" | "ranking";
 type RankingSubTab = "categories" | "products";
@@ -40,6 +42,7 @@ export default function SalesPage() {
   const [rankingSubTab, setRankingSubTab] = useState<RankingSubTab>("categories");
   const [selectedCategory, setSelectedCategory] = useState<{ id: string | null; name: string } | null>(null);
   const [customRange, setCustomRange] = useState<CustomRange>(todayCustomRange());
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   const dailyReport = useDailyReport(new Date(), isAdmin);
   const analytics = useSalesAnalytics();
@@ -81,7 +84,12 @@ export default function SalesPage() {
     <div className="flex flex-col gap-6">
       <div>
         <BackToSettingsLink />
-        <h1 className="text-xl font-bold text-gray-900">تحليلات المبيعات</h1>
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <h1 className="text-xl font-bold text-gray-900">تحليلات المبيعات</h1>
+          <Button type="button" variant="secondary" size="sm" onClick={() => setIsExportModalOpen(true)}>
+            تصدير Excel
+          </Button>
+        </div>
         <Tabs options={PAGE_TABS} value={activeTab} onChange={handleTabChange} className="mt-4" />
       </div>
 
@@ -148,6 +156,8 @@ export default function SalesPage() {
       >
         <RankingList title="" items={drilldownProducts} />
       </Modal>
+
+      <SalesExportModal open={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />
     </div>
   );
 }
