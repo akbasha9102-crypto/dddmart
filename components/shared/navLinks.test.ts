@@ -15,6 +15,7 @@ describe("isSettingsPath", () => {
 
   it("returns true for nested sub-paths", () => {
     expect(isSettingsPath("/employees/123")).toBe(true);
+    expect(isSettingsPath("/settings/store")).toBe(true);
   });
 
   it("returns false for unrelated paths", () => {
@@ -26,7 +27,7 @@ describe("isSettingsPath", () => {
 describe("visibleSettingsLinks", () => {
   it("includes admin-only links for an admin role", () => {
     const hrefs = visibleSettingsLinks("admin").map((link) => link.href);
-    expect(hrefs).toEqual(["/sales", "/customers", "/archive", "/employees"]);
+    expect(hrefs).toEqual(["/sales", "/customers", "/archive", "/employees", "/settings/store"]);
   });
 
   it("excludes admin-only links for a cashier role", () => {
