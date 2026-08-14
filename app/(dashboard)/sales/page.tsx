@@ -7,6 +7,7 @@ import { useSalesAnalytics } from "@/hooks/useSalesAnalytics";
 import { DailyReport } from "@/components/features/sales/DailyReport";
 import { SalesTrendChart } from "@/components/features/sales/SalesTrendChart";
 import { RankingList } from "@/components/features/sales/RankingList";
+import { CashierRankingList } from "@/components/features/sales/CashierRankingList";
 import { RangeDatePicker } from "@/components/features/sales/RangeDatePicker";
 import type { CustomRange, PresetDays } from "@/components/features/sales/RangeDatePicker";
 import { Tabs } from "@/components/ui/Tabs";
@@ -16,7 +17,7 @@ import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
 import { SalesExportModal } from "@/components/features/sales/SalesExportModal";
 
 type PageTab = "today" | "trend" | "ranking";
-type RankingSubTab = "categories" | "products";
+type RankingSubTab = "categories" | "products" | "cashiers";
 
 const PAGE_TABS: { value: PageTab; label: string }[] = [
   { value: "today", label: "اليوم" },
@@ -27,6 +28,7 @@ const PAGE_TABS: { value: PageTab; label: string }[] = [
 const RANKING_SUB_TABS: { value: RankingSubTab; label: string }[] = [
   { value: "categories", label: "الأقسام" },
   { value: "products", label: "المنتجات" },
+  { value: "cashiers", label: "الكاشير" },
 ];
 
 function todayCustomRange(): CustomRange {
@@ -143,8 +145,10 @@ export default function SalesPage() {
               items={analytics.categoryRanking}
               onCategoryClick={(id, name) => setSelectedCategory({ id, name })}
             />
-          ) : (
+          ) : rankingSubTab === "products" ? (
             <RankingList title="ترتيب المنتجات" items={analytics.productRanking} />
+          ) : (
+            <CashierRankingList items={analytics.cashierRanking} />
           )}
         </div>
       ) : null}

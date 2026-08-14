@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getCategoryRanking, getProductRanking, getSalesTrend } from "@/services/sales.service";
-import type { CategoryRankingStat, DailySalesPoint, ProductRankingStat } from "@/services/sales.service";
+import { getCashierRanking, getCategoryRanking, getProductRanking, getSalesTrend } from "@/services/sales.service";
+import type { CashierRankingStat, CategoryRankingStat, DailySalesPoint, ProductRankingStat } from "@/services/sales.service";
 import type { PresetDays, CustomRange } from "@/components/features/sales/RangeDatePicker";
 
 export type AnalyticsRange = { kind: "preset"; days: PresetDays } | { kind: "custom"; startDate: Date; endDate: Date };
@@ -29,6 +29,7 @@ export function useSalesAnalytics() {
   const [trend, setTrend] = useState<DailySalesPoint[]>([]);
   const [productRanking, setProductRanking] = useState<ProductRankingStat[]>([]);
   const [categoryRanking, setCategoryRanking] = useState<CategoryRankingStat[]>([]);
+  const [cashierRanking, setCashierRanking] = useState<CashierRankingStat[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -39,14 +40,16 @@ export function useSalesAnalytics() {
     try {
       const { startDate, endDate } = resolveRange(range);
       const supabase = createClient();
-      const [trendData, productData, categoryData] = await Promise.all([
+      const [trendData, productData, categoryData, cashierData] = await Promise.all([
         getSalesTrend(supabase, { startDate, endDate }),
         getProductRanking(supabase, startDate, endDate),
         getCategoryRanking(supabase, startDate, endDate),
+        getCashierRanking(supabase, startDate, endDate),
       ]);
       setTrend(trendData);
       setProductRanking(productData);
       setCategoryRanking(categoryData);
+      setCashierRanking(cashierData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "حدث خطأ أثناء تحميل التحليلات");
     } finally {
@@ -70,6 +73,7 @@ export function useSalesAnalytics() {
     trend,
     productRanking,
     categoryRanking,
+    cashierRanking,
     isLoading,
     error,
     range,

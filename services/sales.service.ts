@@ -1139,3 +1139,159 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
     }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
 }
+
+export interface CashierRankingStat {
+  cashierId: string | null;
+  cashierName: string;
+  totalRevenue: number;
+  totalQuantity: number;
+  totalProfit: number;
+  /** sum/count of returns on items THIS cashier originally sold (via returns.sale_id -> sales.cashier_id), in range by returns.created_at. */
+  soldReturnsCount: number;
+  soldReturnsValue: number;
+  /** sum/count of returns THIS cashier personally processed (via returns.actor_id), in range by returns.created_at. */
+  processedReturnsCount: number;
+  processedReturnsValue: number;
+}
+
+/** Map key for the null-cashier bucket, so null cashier_id/actor_id rows merge into a single "غير معروف" row. */
+const NULL_CASHIER_KEY = "__null__";
+
+/**
+ * Per-cashier sales + returns report for a date range capped at MAX_RANGE_DAYS.
+ * Revenue/quantity/profit are bucketed by each in-range sale's cashier_id
+ * (profit from each sale_item's snapshotted cost_price, same as getProductRanking).
+ *
+ * Returns are split into two independent fraud-signal metrics, both counted by
+ * returns.refund_amount over returns whose created_at falls in range:
+ *  - soldReturns*: attributed to the cashier who ORIGINALLY SOLD the item, via
+ *    returns.sale_id -> sales.cashier_id. The original sale may be OUTSIDE the
+ *    report range, so its cashier is resolved by a separate batched sales fetch
+ *    over the returns' sale_ids (not the in-range sales fetch above).
+ *  - processedReturns*: attributed to the cashier who PROCESSED the return, via
+ *    returns.actor_id directly.
+ *
+ * A cashier appearing on only one side (sold-only, or processed-returns-only)
+ * still yields a single merged row with the other side's fields at 0. A null
+ * cashier_id/actor_id (or a cashier whose profile row no longer exists) falls
+ * back to "غير معروف" — same convention as getSalesForExport.
+ */
+export async function getCashierRanking(supabase: Client, startDate: Date, endDate: Date): Promise<CashierRankingStat[]> {
+  assertRangeWithinLimit(startDate, endDate);
+
+  // 1. In-range sales (for revenue/quantity/profit).
+  const { data: salesData, error: salesError } = await supabase
+    .from("sales")
+    .select("id, cashier_id")
+    .gte("created_at", startDate.toISOString())
+    .lte("created_at", endDate.toISOString());
+  if (salesError) throw salesError;
+  const sales = salesData ?? [];
+
+  // 2. In-range returns (own fetch: getReturnsInRange doesn't select sale_id/actor_id).
+  const { data: returnsData, error: returnsError } = await supabase
+    .from("returns")
+    .select("sale_id, actor_id, refund_amount, created_at")
+    .gte("created_at", startDate.toISOString())
+    .lte("created_at", endDate.toISOString());
+  if (returnsError) throw returnsError;
+  const returns = returnsData ?? [];
+
+  if (sales.length === 0 && returns.length === 0) return [];
+
+  // 3. sale_items for in-range sales -> per-sale revenue/quantity/profit.
+  interface SaleAgg { revenue: number; quantity: number; profit: number }
+  const aggBySaleId = new Map<string, SaleAgg>();
+  if (sales.length > 0) {
+    const { data: items, error: itemsError } = await supabase
+      .from("sale_items")
+      .select("sale_id, quantity, unit_price, total_price, cost_price")
+      .in("sale_id", sales.map((sale) => sale.id));
+    if (itemsError) throw itemsError;
+    (items ?? []).forEach((item) => {
+      const agg = aggBySaleId.get(item.sale_id) ?? { revenue: 0, quantity: 0, profit: 0 };
+      agg.revenue += item.total_price;
+      agg.quantity += item.quantity;
+      agg.profit += (item.unit_price - item.cost_price) * item.quantity;
+      aggBySaleId.set(item.sale_id, agg);
+    });
+  }
+
+  // 4. Resolve originating cashier for each returned sale_id (may be out of range).
+  const originatingCashierBySaleId = new Map<string, string | null>();
+  const returnSaleIds = Array.from(new Set(returns.map((row) => row.sale_id)));
+  if (returnSaleIds.length > 0) {
+    const { data: originSales, error: originError } = await supabase
+      .from("sales")
+      .select("id, cashier_id")
+      .in("id", returnSaleIds);
+    if (originError) throw originError;
+    (originSales ?? []).forEach((sale) => originatingCashierBySaleId.set(sale.id, sale.cashier_id));
+  }
+
+  // 5. Batched profile lookup over ALL distinct cashier ids seen anywhere.
+  const cashierIds = Array.from(
+    new Set(
+      [
+        ...sales.map((sale) => sale.cashier_id),
+        ...Array.from(originatingCashierBySaleId.values()),
+        ...returns.map((row) => row.actor_id),
+      ].filter((id): id is string => id !== null),
+    ),
+  );
+  const cashierNameById = new Map<string, string>();
+  if (cashierIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", cashierIds);
+    if (profilesError) throw profilesError;
+    (profiles ?? []).forEach((profile) => cashierNameById.set(profile.id, profile.full_name));
+  }
+
+  // 6. Accumulate. Bucket keyed by cashier id, null -> NULL_CASHIER_KEY.
+  const byKey = new Map<string, CashierRankingStat>();
+  const ensureBucket = (cashierId: string | null): CashierRankingStat => {
+    const key = cashierId ?? NULL_CASHIER_KEY;
+    const existing = byKey.get(key);
+    if (existing) return existing;
+    const created: CashierRankingStat = {
+      cashierId,
+      cashierName: cashierId ? (cashierNameById.get(cashierId) ?? "غير معروف") : "غير معروف",
+      totalRevenue: 0,
+      totalQuantity: 0,
+      totalProfit: 0,
+      soldReturnsCount: 0,
+      soldReturnsValue: 0,
+      processedReturnsCount: 0,
+      processedReturnsValue: 0,
+    };
+    byKey.set(key, created);
+    return created;
+  };
+
+  sales.forEach((sale) => {
+    const agg = aggBySaleId.get(sale.id);
+    const bucket = ensureBucket(sale.cashier_id);
+    if (agg) {
+      bucket.totalRevenue += agg.revenue;
+      bucket.totalQuantity += agg.quantity;
+      bucket.totalProfit += agg.profit;
+    }
+  });
+
+  returns.forEach((row) => {
+    // sold side: cashier who originally sold (may be null if sale missing/unattributed).
+    const originatingCashier = originatingCashierBySaleId.get(row.sale_id) ?? null;
+    const soldBucket = ensureBucket(originatingCashier);
+    soldBucket.soldReturnsCount += 1;
+    soldBucket.soldReturnsValue += row.refund_amount;
+
+    // processed side: cashier who processed the return.
+    const processedBucket = ensureBucket(row.actor_id);
+    processedBucket.processedReturnsCount += 1;
+    processedBucket.processedReturnsValue += row.refund_amount;
+  });
+
+  return Array.from(byKey.values()).sort((a, b) => b.totalRevenue - a.totalRevenue);
+}
