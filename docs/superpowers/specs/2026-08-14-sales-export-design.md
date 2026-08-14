@@ -70,8 +70,8 @@ Rejected alternative: a server-side API route generating the file with `exceljs`
 
 ## Error handling
 
-- Zero-row range: toast, no download (see UI section).
-- Fetch error (network/RLS/etc.) or `xlsx` import failure: reuse the existing `components/ui/Toast.tsx` for a generic error message, same pattern as other data-loading failures in this app (e.g. `useDailyReport`'s `error` state).
+- Zero-row range: `components/ui/Toast.tsx`, no download (see UI section).
+- Fetch error (network/RLS/etc.) or `xlsx` import failure: inline red text inside the modal (the same `{error ? <p className="text-sm text-red-600">{error}</p> : null}` convention already used by `StockReconciliationForm` and other modal forms), not `Toast` — `Toast.tsx` hardcodes a green checkmark icon that would be semantically wrong for an error. `Toast` is reserved for the zero-row case, which is informational rather than an error.
 
 ## Testing
 
