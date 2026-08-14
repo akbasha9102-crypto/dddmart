@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database.types";
+import type { Database, PaymentMethod } from "@/types/database.types";
 import type { CheckoutPayload, CompletedSale, Sale, SaleItem, SaleItemInsert } from "@/types/pos";
 import { calculateTotals } from "@/types/pos";
 import { generateInvoiceNumber } from "@/lib/utils";
@@ -884,6 +884,72 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
       totalReconciliationLoss: stat.totalReconciliationLoss,
     }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
+}
+
+export interface SalesExportRow {
+  invoiceNumber: string;
+  createdAt: string;
+  cashierName: string;
+  paymentMethod: PaymentMethod;
+  discountAmount: number;
+  totalAmount: number;
+  itemCount: number;
+}
+
+/**
+ * Flat invoice-level list for the Excel export — deliberately not netted
+ * against returns/damage/reconciliation (that's DailyReport's job). Batches
+ * the cashier-name and item-count lookups (one query each, not one per
+ * sale) the same way getProductRanking batches its product lookup.
+ */
+export async function getSalesForExport(supabase: Client, startDate: Date, endDate: Date): Promise<SalesExportRow[]> {
+  assertRangeWithinLimit(startDate, endDate);
+
+  const { data: sales, error: salesError } = await supabase
+    .from("sales")
+    .select("*")
+    .gte("created_at", startDate.toISOString())
+    .lte("created_at", endDate.toISOString())
+    .order("created_at", { ascending: false });
+  if (salesError) throw salesError;
+  if (!sales || sales.length === 0) return [];
+
+  const cashierIds = Array.from(
+    new Set(sales.map((sale) => sale.cashier_id).filter((id): id is string => id !== null)),
+  );
+  const cashierNameById = new Map<string, string>();
+  if (cashierIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", cashierIds);
+    if (profilesError) throw profilesError;
+    (profiles ?? []).forEach((profile) => cashierNameById.set(profile.id, profile.full_name));
+  }
+
+  const { data: items, error: itemsError } = await supabase
+    .from("sale_items")
+    .select("sale_id, quantity")
+    .in(
+      "sale_id",
+      sales.map((sale) => sale.id),
+    );
+  if (itemsError) throw itemsError;
+
+  const itemCountBySaleId = new Map<string, number>();
+  (items ?? []).forEach((item) => {
+    itemCountBySaleId.set(item.sale_id, (itemCountBySaleId.get(item.sale_id) ?? 0) + item.quantity);
+  });
+
+  return sales.map((sale) => ({
+    invoiceNumber: sale.invoice_number,
+    createdAt: sale.created_at,
+    cashierName: sale.cashier_id ? (cashierNameById.get(sale.cashier_id) ?? "غير معروف") : "غير معروف",
+    paymentMethod: sale.payment_method,
+    discountAmount: sale.discount_amount,
+    totalAmount: sale.total_amount,
+    itemCount: itemCountBySaleId.get(sale.id) ?? 0,
+  }));
 }
 
 export interface CategoryRankingStat {
