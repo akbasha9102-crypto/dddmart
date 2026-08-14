@@ -2,13 +2,13 @@
 
 import { Archive, Banknote, PackagePlus, PackageX, Pencil, Plus, ShoppingCart, Trash2, Undo2, UserPlus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { OperationLog } from "@/types/archive";
+import type { OperationLogWithActor } from "@/types/archive";
 import type { OperationActionType } from "@/types/database.types";
 import { formatDateTime } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 
 interface ArchiveListProps {
-  operations: OperationLog[];
+  operations: OperationLogWithActor[];
 }
 
 /** Small icon map keyed by action_type — distinct from the category icon system. */
@@ -53,7 +53,9 @@ export function ArchiveList({ operations }: ArchiveListProps) {
               </span>
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">{operation.description}</p>
-                <p className="mt-0.5 text-xs text-gray-400">{formatDateTime(operation.created_at)}</p>
+                <p className="mt-0.5 text-xs text-gray-400">
+                  {formatDateTime(operation.created_at)} · {operation.actorName}
+                </p>
               </div>
             </div>
           );

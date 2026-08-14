@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, OperationActionType, OperationEntityType } from "@/types/database.types";
-import type { OperationLog } from "@/types/archive";
+import type { OperationLog, OperationLogWithActor } from "@/types/archive";
 
 type Client = SupabaseClient<Database>;
 
@@ -49,7 +49,7 @@ export interface ArchiveFilter {
   entityType?: OperationEntityType;
 }
 
-export async function listOperations(supabase: Client, filter?: ArchiveFilter): Promise<OperationLog[]> {
+export async function listOperations(supabase: Client, filter?: ArchiveFilter): Promise<OperationLogWithActor[]> {
   let query = supabase.from("operations_log").select("*").order("created_at", { ascending: false });
 
   if (filter?.startDate) query = query.gte("created_at", filter.startDate.toISOString());
@@ -60,5 +60,25 @@ export async function listOperations(supabase: Client, filter?: ArchiveFilter): 
   const { data, error } = await query;
 
   if (error) throw error;
-  return data ?? [];
+
+  const operations: OperationLog[] = data ?? [];
+
+  const userIds = Array.from(
+    new Set(operations.map((op) => op.user_id).filter((id): id is string => id !== null)),
+  );
+
+  const actorNameById = new Map<string, string>();
+  if (userIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", userIds);
+    if (profilesError) throw profilesError;
+    (profiles ?? []).forEach((profile) => actorNameById.set(profile.id, profile.full_name));
+  }
+
+  return operations.map((op) => ({
+    ...op,
+    actorName: op.user_id ? (actorNameById.get(op.user_id) ?? "غير معروف") : "غير معروف",
+  }));
 }

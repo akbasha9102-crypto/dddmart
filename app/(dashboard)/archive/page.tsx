@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { listOperations } from "@/services/archive.service";
-import type { OperationLog } from "@/types/archive";
+import type { OperationLogWithActor } from "@/types/archive";
 import type { OperationEntityType } from "@/types/database.types";
 import { ArchiveList } from "@/components/features/archive/ArchiveList";
 import { cn } from "@/lib/utils";
@@ -44,7 +44,7 @@ function rangeToStartDate(range: RangeOption): Date | undefined {
 export default function ArchivePage() {
   const [range, setRange] = useState<RangeOption>("today");
   const [entityType, setEntityType] = useState<OperationEntityType | "all">("all");
-  const [operations, setOperations] = useState<OperationLog[]>([]);
+  const [operations, setOperations] = useState<OperationLogWithActor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadData = useCallback(async () => {
