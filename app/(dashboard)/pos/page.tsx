@@ -66,7 +66,7 @@ export default function POSPage() {
 
   const { isMuted, toggle: toggleMuted } = useSoundSettings();
 
-  const { user, storeId } = useAuth();
+  const { user, storeId, isLoading: isAuthLoading } = useAuth();
   const { shift, isLoading: isShiftLoading, isSubmitting: isShiftSubmitting, error: shiftError, open: openShiftAction } = useShift({
     cashierId: user?.id ?? null,
     storeId,
@@ -320,7 +320,7 @@ export default function POSPage() {
 
       {toastMessage ? <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} /> : null}
 
-      <ShiftGate shift={shift} isLoading={isShiftLoading} isSubmitting={isShiftSubmitting} error={shiftError} onOpen={openShiftAction} />
+      <ShiftGate shift={shift} isLoading={isAuthLoading || isShiftLoading} isSubmitting={isShiftSubmitting} error={shiftError} onOpen={openShiftAction} />
     </div>
   );
 }
