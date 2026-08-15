@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { recordStockPurchase } from "@/services/products.service";
+import { listSuppliers } from "@/services/suppliers.service";
 import { useAuth } from "@/context/AuthContext";
 import { toBaseUnitCost, toBaseUnits } from "@/lib/units";
 import { formatCurrency } from "@/lib/utils";
 import type { Product, ProductUnit } from "@/types/product";
+import type { SupplierWithBalance } from "@/types/supplier";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
@@ -18,9 +20,11 @@ interface ReceiveStockFormProps {
   onCancel: () => void;
 }
 
-/** Lets an admin record a wholesale purchase (e.g. a كرتونة) and automatically break it down into base-unit stock, updating cost_price via weighted average. */
+/** Lets an admin record a wholesale purchase (e.g. a كرتونة) and automatically break it down into base-unit stock, updating cost_price via weighted average. Admins additionally see optional supplier/invoice/payment-method fields that post to the supplier's ledger; a cashier sees only quantity/cost, unchanged from before. */
 export function ReceiveStockForm({ product, units, onSaved, onCancel }: ReceiveStockFormProps) {
-  const { user, storeId } = useAuth();
+  const { user, storeId, role } = useAuth();
+  const isAdmin = role === "admin";
+
   const unitOptions = useMemo(
     () => [
       { value: "base", label: product.unit, factor: 1 },
@@ -34,6 +38,24 @@ export function ReceiveStockForm({ product, units, onSaved, onCancel }: ReceiveS
   const [costPerUnit, setCostPerUnit] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const [suppliers, setSuppliers] = useState<SupplierWithBalance[]>([]);
+  const [supplierId, setSupplierId] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "credit" | "">("");
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const supabase = createClient();
+    listSuppliers(supabase)
+      .then(setSuppliers)
+      .catch(() => setSuppliers([]));
+  }, [isAdmin]);
+
+  function handleSupplierChange(value: string) {
+    setSupplierId(value);
+    if (!value) setPaymentMethod("");
+  }
 
   const baseUnitOption = { value: "base", label: product.unit, factor: 1 };
   const selectedUnit = unitOptions.find((option) => option.value === selectedUnitValue) ?? baseUnitOption;
@@ -60,6 +82,10 @@ export function ReceiveStockForm({ product, units, onSaved, onCancel }: ReceiveS
       setError("سعر الشراء يجب أن يكون صفراً أو أكبر");
       return;
     }
+    if (isAdmin && supplierId && !paymentMethod) {
+      setError("يجب تحديد طريقة الدفع عند اختيار مورد");
+      return;
+    }
 
     if (!storeId) {
       setError("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
@@ -70,6 +96,7 @@ export function ReceiveStockForm({ product, units, onSaved, onCancel }: ReceiveS
     setIsSaving(true);
     try {
       const supabase = createClient();
+      const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId);
       const updated = await recordStockPurchase(
         supabase,
         {
@@ -79,6 +106,10 @@ export function ReceiveStockForm({ product, units, onSaved, onCancel }: ReceiveS
           unitName: selectedUnit.value === "base" ? null : selectedUnit.label,
           conversionFactor: selectedUnit.factor,
           costPerPurchasedUnit: costNumber,
+          supplierId: isAdmin && supplierId ? supplierId : null,
+          supplierName: isAdmin && supplierId ? (selectedSupplier?.name ?? null) : null,
+          invoiceNumber: isAdmin && invoiceNumber.trim() ? invoiceNumber.trim() : null,
+          paymentMethod: isAdmin && supplierId ? (paymentMethod || null) : null,
         },
         user?.id ?? null,
         storeId,
@@ -131,6 +162,59 @@ export function ReceiveStockForm({ product, units, onSaved, onCancel }: ReceiveS
         onChange={(event) => setCostPerUnit(event.target.value)}
         required
       />
+
+      {isAdmin ? (
+        <>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="receive-supplier" className="text-sm font-medium text-gray-700">
+              المورد (اختياري)
+            </label>
+            <select
+              id="receive-supplier"
+              value={supplierId}
+              onChange={(event) => handleSupplierChange(event.target.value)}
+              className="h-11 rounded-lg border border-gray-300 px-3 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+            >
+              <option value="">بدون مورد</option>
+              {suppliers.map((supplier) => (
+                <option key={supplier.id} value={supplier.id}>
+                  {supplier.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <Input
+            label="رقم الفاتورة (اختياري)"
+            value={invoiceNumber}
+            onChange={(event) => setInvoiceNumber(event.target.value)}
+          />
+
+          {supplierId ? (
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-gray-700">طريقة الدفع</span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={paymentMethod === "cash" ? "primary" : "secondary"}
+                  className="flex-1"
+                  onClick={() => setPaymentMethod("cash")}
+                >
+                  نقداً
+                </Button>
+                <Button
+                  type="button"
+                  variant={paymentMethod === "credit" ? "primary" : "secondary"}
+                  className="flex-1"
+                  onClick={() => setPaymentMethod("credit")}
+                >
+                  آجل
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
 
       {isPreviewValid ? (
         <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
