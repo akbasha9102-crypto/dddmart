@@ -1,0 +1,111 @@
+import { describe, expect, it, vi } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { getSupplierBalance, createSupplier } from "./suppliers.service";
+import type { Database } from "@/types/database.types";
+import type { Supplier } from "@/types/supplier";
+
+const INSERTED_SUPPLIER: Supplier = {
+  id: "supplier-1",
+  name: "شركة الفرات",
+  phone: null,
+  address: null,
+  note: null,
+  opening_balance: 0,
+  is_active: true,
+  store_id: "store-1",
+  created_at: "",
+  updated_at: "",
+};
+
+function createFakeSupabase(options: { balance: number | null; insertedSupplier: Supplier }): {
+  supabase: SupabaseClient<Database>;
+  insertSpy: ReturnType<typeof vi.fn>;
+  logInsertSpy: ReturnType<typeof vi.fn>;
+} {
+  const insertSpy = vi.fn(() => ({
+    select: () => ({
+      single: async () => ({ data: options.insertedSupplier, error: null }),
+    }),
+  }));
+  const logInsertSpy = vi.fn(async () => ({ data: null, error: null }));
+
+  const supabase = {
+    from: (table: string) => {
+      if (table === "supplier_balances") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: options.balance === null ? null : { supplier_id: "supplier-1", balance: options.balance },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "suppliers") {
+        return { insert: insertSpy };
+      }
+      if (table === "operations_log") {
+        return { insert: logInsertSpy };
+      }
+      throw new Error(`unexpected table ${table}`);
+    },
+  } as unknown as SupabaseClient<Database>;
+
+  return { supabase, insertSpy, logInsertSpy };
+}
+
+describe("getSupplierBalance", () => {
+  it("returns 0 when the view has no row for that supplier", async () => {
+    const { supabase } = createFakeSupabase({ balance: null, insertedSupplier: INSERTED_SUPPLIER });
+
+    const result = await getSupplierBalance(supabase, "supplier-1");
+
+    expect(result).toBe(0);
+  });
+
+  it("returns the view's balance (including a non-zero opening balance already folded in)", async () => {
+    const { supabase } = createFakeSupabase({ balance: 15000, insertedSupplier: INSERTED_SUPPLIER });
+
+    const result = await getSupplierBalance(supabase, "supplier-1");
+
+    expect(result).toBe(15000);
+  });
+});
+
+describe("createSupplier", () => {
+  it("rejects an empty name", async () => {
+    const { supabase } = createFakeSupabase({ balance: 0, insertedSupplier: INSERTED_SUPPLIER });
+
+    await expect(createSupplier(supabase, { name: "   " }, "user-1", "store-1")).rejects.toThrow("اسم المورد مطلوب");
+  });
+
+  it("inserts a supplier with a default opening_balance of 0 and logs supplier_created", async () => {
+    const { supabase, insertSpy, logInsertSpy } = createFakeSupabase({
+      balance: 0,
+      insertedSupplier: INSERTED_SUPPLIER,
+    });
+
+    const result = await createSupplier(supabase, { name: "شركة الفرات" }, "user-1", "store-1");
+
+    expect(insertSpy).toHaveBeenCalledWith({
+      name: "شركة الفرات",
+      phone: null,
+      address: null,
+      note: null,
+      opening_balance: 0,
+      store_id: "store-1",
+    });
+    expect(logInsertSpy).toHaveBeenCalledWith(expect.objectContaining({ action_type: "supplier_created" }));
+    expect(result).toEqual(INSERTED_SUPPLIER);
+  });
+
+  it("passes through a non-zero opening_balance", async () => {
+    const { supabase, insertSpy } = createFakeSupabase({ balance: 0, insertedSupplier: INSERTED_SUPPLIER });
+
+    await createSupplier(supabase, { name: "شركة الفرات", openingBalance: 25000 }, "user-1", "store-1");
+
+    expect(insertSpy).toHaveBeenCalledWith(expect.objectContaining({ opening_balance: 25000 }));
+  });
+});
