@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { listAllProductUnits, receiveStock, recordStockPurchase, resolveBarcode } from "./products.service";
 import type { Database } from "@/types/database.types";
-import type { Product, ProductUnit } from "@/types/product";
+import type { Product, ProductUnit, StockPurchase } from "@/types/product";
 
 const BASE_PRODUCT: Product = {
   id: "product-1",
@@ -106,22 +106,60 @@ describe("listAllProductUnits", () => {
   });
 });
 
+const INSERTED_STOCK_PURCHASE: StockPurchase = {
+  id: "purchase-1",
+  product_id: "product-1",
+  product_name: "علبة علك",
+  quantity: 10,
+  cost_price: 1.5,
+  total_cost: 15,
+  supplier_id: null,
+  invoice_number: null,
+  payment_method: null,
+  actor_id: "user-1",
+  store_id: "store-1",
+  created_at: "",
+};
+
 /**
  * Hand-rolled fake covering receiveStock's rpc() call and
- * recordStockPurchase's follow-up logOperation insert. Deliberately
+ * recordStockPurchase's follow-up inserts: stock_purchases (needs
+ * .select().single(), returns insertedStockPurchase), supplier_transactions
+ * (plain insert, no chain), and operations_log (plain insert). Routed by
+ * table name since each needs a different chain shape. Deliberately
  * minimal, matching the other fakes in this file.
  */
 function createFakeSupabaseForReceiveStock(options: {
   rpcData: Product[] | null;
   rpcError?: unknown;
-}): { supabase: SupabaseClient<Database>; rpcSpy: ReturnType<typeof vi.fn>; insertSpy: ReturnType<typeof vi.fn> } {
+  insertedStockPurchase?: StockPurchase;
+}): {
+  supabase: SupabaseClient<Database>;
+  rpcSpy: ReturnType<typeof vi.fn>;
+  logInsertSpy: ReturnType<typeof vi.fn>;
+  stockPurchaseInsertSpy: ReturnType<typeof vi.fn>;
+  supplierTransactionInsertSpy: ReturnType<typeof vi.fn>;
+} {
   const rpcSpy = vi.fn(async () => ({ data: options.rpcData, error: options.rpcError ?? null }));
-  const insertSpy = vi.fn(async () => ({ data: null, error: null }));
+  const logInsertSpy = vi.fn(async () => ({ data: null, error: null }));
+  const stockPurchaseInsertSpy = vi.fn(() => ({
+    select: () => ({
+      single: async () => ({ data: options.insertedStockPurchase ?? INSERTED_STOCK_PURCHASE, error: null }),
+    }),
+  }));
+  const supplierTransactionInsertSpy = vi.fn(async () => ({ data: null, error: null }));
+
   const supabase = {
     rpc: rpcSpy,
-    from: () => ({ insert: insertSpy }),
+    from: (table: string) => {
+      if (table === "stock_purchases") return { insert: stockPurchaseInsertSpy };
+      if (table === "supplier_transactions") return { insert: supplierTransactionInsertSpy };
+      if (table === "operations_log") return { insert: logInsertSpy };
+      throw new Error(`unexpected table ${table}`);
+    },
   } as unknown as SupabaseClient<Database>;
-  return { supabase, rpcSpy, insertSpy };
+
+  return { supabase, rpcSpy, logInsertSpy, stockPurchaseInsertSpy, supplierTransactionInsertSpy };
 }
 
 const RECEIVED_PRODUCT: Product = { ...BASE_PRODUCT, quantity: 74, cost_price: 1.5 };
@@ -152,7 +190,7 @@ describe("receiveStock", () => {
 
 describe("recordStockPurchase", () => {
   it("passes a base-unit purchase (factor 1) through unchanged", async () => {
-    const { supabase, rpcSpy, insertSpy } = createFakeSupabaseForReceiveStock({ rpcData: [RECEIVED_PRODUCT] });
+    const { supabase, rpcSpy, logInsertSpy } = createFakeSupabaseForReceiveStock({ rpcData: [RECEIVED_PRODUCT] });
     const result = await recordStockPurchase(
       supabase,
       {
@@ -171,7 +209,7 @@ describe("recordStockPurchase", () => {
       p_added_base_units: 10,
       p_unit_base_cost: 1.5,
     });
-    expect(insertSpy).toHaveBeenCalledWith(
+    expect(logInsertSpy).toHaveBeenCalledWith(
       expect.objectContaining({ action_type: "stock_received", user_id: "user-1", store_id: "store-1" }),
     );
     expect(result).toEqual(RECEIVED_PRODUCT);
@@ -216,5 +254,124 @@ describe("recordStockPurchase", () => {
         "store-1",
       ),
     ).rejects.toThrow("تعذر استلام المخزون");
+  });
+
+  it("always inserts a stock_purchases row, even with no supplier", async () => {
+    const { supabase, stockPurchaseInsertSpy } = createFakeSupabaseForReceiveStock({ rpcData: [RECEIVED_PRODUCT] });
+    await recordStockPurchase(
+      supabase,
+      {
+        productId: "product-1",
+        productName: "علبة علك",
+        purchasedQuantity: 10,
+        unitName: null,
+        conversionFactor: 1,
+        costPerPurchasedUnit: 1.5,
+      },
+      "user-1",
+      "store-1",
+    );
+    expect(stockPurchaseInsertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        product_id: "product-1",
+        quantity: 10,
+        cost_price: 1.5,
+        total_cost: 15,
+        supplier_id: null,
+        payment_method: null,
+        store_id: "store-1",
+      }),
+    );
+  });
+
+  it("rejects a supplier without a payment method", async () => {
+    const { supabase } = createFakeSupabaseForReceiveStock({ rpcData: [RECEIVED_PRODUCT] });
+    await expect(
+      recordStockPurchase(
+        supabase,
+        {
+          productId: "product-1",
+          productName: "علبة علك",
+          purchasedQuantity: 10,
+          unitName: null,
+          conversionFactor: 1,
+          costPerPurchasedUnit: 1.5,
+          supplierId: "supplier-1",
+        },
+        "user-1",
+        "store-1",
+      ),
+    ).rejects.toThrow("يجب تحديد طريقة الدفع عند اختيار مورد");
+  });
+
+  it("with a supplier and cash payment, inserts a purchase row and a matching payment row", async () => {
+    const { supabase, supplierTransactionInsertSpy } = createFakeSupabaseForReceiveStock({ rpcData: [RECEIVED_PRODUCT] });
+    await recordStockPurchase(
+      supabase,
+      {
+        productId: "product-1",
+        productName: "علبة علك",
+        purchasedQuantity: 10,
+        unitName: null,
+        conversionFactor: 1,
+        costPerPurchasedUnit: 1.5,
+        supplierId: "supplier-1",
+        supplierName: "شركة الفرات",
+        invoiceNumber: "INV-1",
+        paymentMethod: "cash",
+      },
+      "user-1",
+      "store-1",
+    );
+    expect(supplierTransactionInsertSpy).toHaveBeenCalledTimes(2);
+    expect(supplierTransactionInsertSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ supplier_id: "supplier-1", type: "purchase", amount: 15, stock_purchase_id: "purchase-1" }),
+    );
+    expect(supplierTransactionInsertSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ supplier_id: "supplier-1", type: "payment", amount: 15, stock_purchase_id: "purchase-1" }),
+    );
+  });
+
+  it("with a supplier and credit payment, inserts only a purchase row", async () => {
+    const { supabase, supplierTransactionInsertSpy } = createFakeSupabaseForReceiveStock({ rpcData: [RECEIVED_PRODUCT] });
+    await recordStockPurchase(
+      supabase,
+      {
+        productId: "product-1",
+        productName: "علبة علك",
+        purchasedQuantity: 10,
+        unitName: null,
+        conversionFactor: 1,
+        costPerPurchasedUnit: 1.5,
+        supplierId: "supplier-1",
+        paymentMethod: "credit",
+      },
+      "user-1",
+      "store-1",
+    );
+    expect(supplierTransactionInsertSpy).toHaveBeenCalledTimes(1);
+    expect(supplierTransactionInsertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ supplier_id: "supplier-1", type: "purchase", amount: 15 }),
+    );
+  });
+
+  it("with no supplier, never touches supplier_transactions", async () => {
+    const { supabase, supplierTransactionInsertSpy } = createFakeSupabaseForReceiveStock({ rpcData: [RECEIVED_PRODUCT] });
+    await recordStockPurchase(
+      supabase,
+      {
+        productId: "product-1",
+        productName: "علبة علك",
+        purchasedQuantity: 10,
+        unitName: null,
+        conversionFactor: 1,
+        costPerPurchasedUnit: 1.5,
+      },
+      "user-1",
+      "store-1",
+    );
+    expect(supplierTransactionInsertSpy).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database.types";
+import type { Database, PaymentMethod } from "@/types/database.types";
 import { isLowStock } from "@/types/product";
 import type { Product, ProductInsert, ProductUpdate, ProductUnit, ProductUnitInsert, ProductUnitUpdate, ProductWithCategory } from "@/types/product";
 import { logOperation } from "@/services/archive.service";
@@ -271,38 +271,106 @@ export async function receiveStock(
   return data?.[0] ?? null;
 }
 
+export interface RecordStockPurchaseParams {
+  productId: string;
+  productName: string;
+  purchasedQuantity: number;
+  unitName: string | null; // null = base unit (products.unit)
+  conversionFactor: number; // 1 for base unit
+  costPerPurchasedUnit: number;
+  supplierId?: string | null;
+  supplierName?: string | null;
+  invoiceNumber?: string | null;
+  paymentMethod?: PaymentMethod | null;
+}
+
 /**
  * Records a purchase of stock-by-pack: converts the purchased quantity and
- * per-unit cost into base-unit terms, calls receiveStock, and logs a
- * stock_received audit entry. This is the function the UI calls.
- * Throws if the product wasn't found or the RPC's guards rejected the
- * input — surfaced as a generic Arabic error by the calling form.
+ * per-unit cost into base-unit terms, calls receiveStock, always inserts a
+ * stock_purchases row (the permanent receipt record), and — only when a
+ * supplier is attached — posts directly to supplier_transactions (a
+ * 'purchase' row, plus an immediate matching 'payment' row when paid
+ * cash). These supplier_transactions inserts are NOT routed through
+ * recordSupplierPurchase/recordSupplierPayment and are not separately
+ * audit-logged — same reasoning as a POS credit sale posting directly to
+ * customer_transactions. Finally logs one stock_received audit entry,
+ * mentioning the supplier/invoice when present. This is the function the
+ * UI calls. Throws if the product wasn't found, the RPC's guards rejected
+ * the input, or a supplier was given without a payment method.
  */
 export async function recordStockPurchase(
   supabase: Client,
-  params: {
-    productId: string;
-    productName: string;
-    purchasedQuantity: number;
-    unitName: string | null; // null = base unit (products.unit)
-    conversionFactor: number; // 1 for base unit
-    costPerPurchasedUnit: number;
-  },
+  params: RecordStockPurchaseParams,
   actorId: string | null,
   storeId: string,
 ): Promise<Product> {
+  if (params.supplierId && !params.paymentMethod) {
+    throw new Error("يجب تحديد طريقة الدفع عند اختيار مورد");
+  }
+
   const addedBaseUnits = toBaseUnits(params.purchasedQuantity, params.conversionFactor);
   const unitBaseCost = toBaseUnitCost(params.costPerPurchasedUnit, params.conversionFactor);
+  const totalCost = Math.round(addedBaseUnits * unitBaseCost * 100) / 100;
 
   const updated = await receiveStock(supabase, params.productId, addedBaseUnits, unitBaseCost);
   if (!updated) throw new Error("تعذر استلام المخزون — تحقق من القيم المدخلة");
+
+  const { data: purchase, error: purchaseError } = await supabase
+    .from("stock_purchases")
+    .insert({
+      product_id: params.productId,
+      product_name: params.productName,
+      quantity: addedBaseUnits,
+      cost_price: unitBaseCost,
+      total_cost: totalCost,
+      supplier_id: params.supplierId ?? null,
+      invoice_number: params.invoiceNumber ?? null,
+      payment_method: params.supplierId ? (params.paymentMethod ?? null) : null,
+      actor_id: actorId,
+      store_id: storeId,
+    })
+    .select()
+    .single();
+  if (purchaseError) throw purchaseError;
+
+  if (params.supplierId) {
+    const transactionNote = params.invoiceNumber
+      ? `فاتورة رقم ${params.invoiceNumber} — ${params.purchasedQuantity} ${params.unitName ?? updated.unit} من "${params.productName}"`
+      : `شراء ${params.purchasedQuantity} ${params.unitName ?? updated.unit} من "${params.productName}"`;
+
+    const { error: purchaseTxnError } = await supabase.from("supplier_transactions").insert({
+      supplier_id: params.supplierId,
+      type: "purchase",
+      amount: totalCost,
+      note: transactionNote,
+      stock_purchase_id: purchase.id,
+      store_id: storeId,
+    });
+    if (purchaseTxnError) throw purchaseTxnError;
+
+    if (params.paymentMethod === "cash") {
+      const { error: paymentTxnError } = await supabase.from("supplier_transactions").insert({
+        supplier_id: params.supplierId,
+        type: "payment",
+        amount: totalCost,
+        note: transactionNote,
+        stock_purchase_id: purchase.id,
+        store_id: storeId,
+      });
+      if (paymentTxnError) throw paymentTxnError;
+    }
+  }
+
+  const supplierNote = params.supplierId
+    ? ` — مورد: ${params.supplierName ?? ""}${params.invoiceNumber ? `، فاتورة رقم ${params.invoiceNumber}` : ""}`
+    : "";
 
   await logOperation(supabase, {
     userId: actorId,
     actionType: "stock_received",
     entityType: "stock",
     entityId: updated.id,
-    description: `تم استلام ${params.purchasedQuantity} ${params.unitName ?? "قطعة"} (${addedBaseUnits} ${updated.unit}) من "${params.productName}" — سعر التكلفة الجديد ${updated.cost_price}`,
+    description: `تم استلام ${params.purchasedQuantity} ${params.unitName ?? "قطعة"} (${addedBaseUnits} ${updated.unit}) من "${params.productName}" — سعر التكلفة الجديد ${updated.cost_price}${supplierNote}`,
     storeId,
   });
 
