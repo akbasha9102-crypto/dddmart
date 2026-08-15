@@ -14,6 +14,7 @@ import { ReturnLookup } from "@/components/features/pos/ReturnLookup";
 import { HeldSalesList } from "@/components/features/pos/HeldSalesList";
 import { CustomerPicker } from "@/components/features/pos/CustomerPicker";
 import { ShiftGate } from "@/components/features/pos/ShiftGate";
+import { CloseShiftModal } from "@/components/features/pos/CloseShiftModal";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -67,10 +68,11 @@ export default function POSPage() {
   const { isMuted, toggle: toggleMuted } = useSoundSettings();
 
   const { user, storeId, isLoading: isAuthLoading } = useAuth();
-  const { shift, isLoading: isShiftLoading, isSubmitting: isShiftSubmitting, error: shiftError, open: openShiftAction } = useShift({
+  const { shift, isLoading: isShiftLoading, isSubmitting: isShiftSubmitting, error: shiftError, open: openShiftAction, close: closeShiftAction } = useShift({
     cashierId: user?.id ?? null,
     storeId,
   });
+  const [isCloseShiftOpen, setIsCloseShiftOpen] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -157,6 +159,15 @@ export default function POSPage() {
               </button>
             ))}
           </div>
+          {shift ? (
+            <button
+              type="button"
+              onClick={() => setIsCloseShiftOpen(true)}
+              className="shrink-0 rounded-full border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100"
+            >
+              إغلاق الوردية
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={toggleMuted}
@@ -321,6 +332,20 @@ export default function POSPage() {
       {toastMessage ? <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} /> : null}
 
       <ShiftGate shift={shift} isLoading={isAuthLoading || isShiftLoading} isSubmitting={isShiftSubmitting} error={shiftError} onOpen={openShiftAction} />
+
+      {shift ? (
+        <CloseShiftModal
+          shift={shift}
+          open={isCloseShiftOpen}
+          isSubmitting={isShiftSubmitting}
+          error={shiftError}
+          onClose={() => setIsCloseShiftOpen(false)}
+          onConfirm={async (counted) => {
+            await closeShiftAction(counted);
+            setIsCloseShiftOpen(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
