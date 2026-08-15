@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { Volume2, VolumeX } from "lucide-react";
 import { usePOSContext } from "@/context/POSContext";
+import { useAuth } from "@/context/AuthContext";
 import { useSoundSettings } from "@/hooks/useSoundSettings";
+import { useShift } from "@/hooks/useShift";
 import { BarcodeScanner } from "@/components/features/pos/BarcodeScanner";
 import { CartGrid } from "@/components/features/pos/CartGrid";
 import { ReceiptPrinter } from "@/components/features/pos/ReceiptPrinter";
@@ -11,6 +13,7 @@ import { OfflineBanner } from "@/components/features/pos/OfflineBanner";
 import { ReturnLookup } from "@/components/features/pos/ReturnLookup";
 import { HeldSalesList } from "@/components/features/pos/HeldSalesList";
 import { CustomerPicker } from "@/components/features/pos/CustomerPicker";
+import { ShiftGate } from "@/components/features/pos/ShiftGate";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -62,6 +65,12 @@ export default function POSPage() {
   const [overLimitWarning, setOverLimitWarning] = useState<string | null>(null);
 
   const { isMuted, toggle: toggleMuted } = useSoundSettings();
+
+  const { user, storeId } = useAuth();
+  const { shift, isLoading: isShiftLoading, isSubmitting: isShiftSubmitting, error: shiftError, open: openShiftAction } = useShift({
+    cashierId: user?.id ?? null,
+    storeId,
+  });
 
   useEffect(() => {
     const supabase = createClient();
@@ -310,6 +319,8 @@ export default function POSPage() {
       </Modal>
 
       {toastMessage ? <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} /> : null}
+
+      <ShiftGate shift={shift} isLoading={isShiftLoading} isSubmitting={isShiftSubmitting} error={shiftError} onOpen={openShiftAction} />
     </div>
   );
 }
