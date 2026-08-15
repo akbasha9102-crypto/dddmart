@@ -124,6 +124,7 @@ const INSERTED_TRANSACTION: SupplierTransaction = {
   type: "payment",
   amount: 5000,
   note: null,
+  stock_purchase_id: null,
   store_id: "store-1",
   created_at: "",
 };

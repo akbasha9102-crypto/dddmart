@@ -718,6 +718,7 @@ export interface Database {
           type: SupplierTransactionType;
           amount: number;
           note: string | null;
+          stock_purchase_id: string | null;
           store_id: string;
           created_at: string;
         };
@@ -727,6 +728,7 @@ export interface Database {
           type: SupplierTransactionType;
           amount: number;
           note?: string | null;
+          stock_purchase_id?: string | null;
           store_id: string;
           created_at?: string;
         };
@@ -736,6 +738,7 @@ export interface Database {
           type?: SupplierTransactionType;
           amount?: number;
           note?: string | null;
+          stock_purchase_id?: string | null;
           store_id?: string;
           created_at?: string;
         };
@@ -745,6 +748,13 @@ export interface Database {
             columns: ["supplier_id"];
             isOneToOne: false;
             referencedRelation: "suppliers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "supplier_transactions_stock_purchase_id_fkey";
+            columns: ["stock_purchase_id"];
+            isOneToOne: false;
+            referencedRelation: "stock_purchases";
             referencedColumns: ["id"];
           },
         ];
@@ -787,6 +797,73 @@ export interface Database {
             columns: ["product_id"];
             isOneToOne: false;
             referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      stock_purchases: {
+        Row: {
+          id: string;
+          product_id: string | null;
+          product_name: string;
+          quantity: number;
+          cost_price: number;
+          total_cost: number;
+          supplier_id: string | null;
+          invoice_number: string | null;
+          payment_method: PaymentMethod | null;
+          actor_id: string | null;
+          store_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id?: string | null;
+          product_name: string;
+          quantity: number;
+          cost_price: number;
+          total_cost: number;
+          supplier_id?: string | null;
+          invoice_number?: string | null;
+          payment_method?: PaymentMethod | null;
+          actor_id?: string | null;
+          store_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string | null;
+          product_name?: string;
+          quantity?: number;
+          cost_price?: number;
+          total_cost?: number;
+          supplier_id?: string | null;
+          invoice_number?: string | null;
+          payment_method?: PaymentMethod | null;
+          actor_id?: string | null;
+          store_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "stock_purchases_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "stock_purchases_supplier_id_fkey";
+            columns: ["supplier_id"];
+            isOneToOne: false;
+            referencedRelation: "suppliers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "stock_purchases_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
