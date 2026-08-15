@@ -147,3 +147,65 @@ export async function calculateExpectedAmount(supabase: Client, shift: Shift, cl
 
   return shift.opening_balance + cashSales + cashPayments - cashRefunds;
 }
+
+export interface CloseShiftParams {
+  shiftId: string;
+  /** The physically counted cash amount. Must be null when isForced is true (nobody counted it). */
+  countedAmount: number | null;
+}
+
+/**
+ * Closes a shift. A normal close (isForced = false) requires a
+ * countedAmount and computes the shortage/surplus difference. A forced
+ * close (an admin closing a shift the cashier left open) leaves
+ * counted_amount/difference null -- nobody physically counted the drawer
+ * -- and records forced_closed_by instead.
+ */
+export async function closeShift(
+  supabase: Client,
+  params: CloseShiftParams,
+  actorId: string | null,
+  storeId: string,
+  isForced: boolean,
+): Promise<Shift> {
+  const { data: shift, error: fetchError } = await supabase.from("shifts").select("*").eq("id", params.shiftId).maybeSingle();
+  if (fetchError) throw fetchError;
+  if (!shift) throw new Error("لم يتم العثور على الوردية");
+  if (shift.status === "closed") throw new Error("هذه الوردية مغلقة أصلاً");
+
+  const closeTime = new Date();
+  const expectedAmount = await calculateExpectedAmount(supabase, shift, closeTime);
+  const countedAmount = isForced ? null : params.countedAmount;
+  const difference = countedAmount === null ? null : countedAmount - expectedAmount;
+
+  const { data: updated, error: updateError } = await supabase
+    .from("shifts")
+    .update({
+      status: "closed",
+      closed_at: closeTime.toISOString(),
+      expected_amount: expectedAmount,
+      counted_amount: countedAmount,
+      difference,
+      forced_closed_by: isForced ? actorId : null,
+    })
+    .eq("id", params.shiftId)
+    .select()
+    .single();
+
+  if (updateError) throw updateError;
+
+  const description = isForced
+    ? `تم إغلاق وردية الكاشير قسرياً — المتوقع ${expectedAmount}`
+    : `تم إغلاق وردية الكاشير — المتوقع ${expectedAmount}، المعدود ${countedAmount}، الفرق ${difference}`;
+
+  await logOperation(supabase, {
+    userId: actorId,
+    actionType: "shift_closed",
+    entityType: "shift",
+    entityId: params.shiftId,
+    description,
+    storeId,
+  });
+
+  return updated;
+}
