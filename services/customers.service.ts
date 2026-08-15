@@ -190,6 +190,7 @@ export async function recordPayment(
       amount: input.amount,
       note: input.note ?? null,
       store_id: storeId,
+      cashier_id: actorId,
     })
     .select()
     .single();

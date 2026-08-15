@@ -10,7 +10,7 @@ const INSERTED_TRANSACTION: CustomerTransaction = {
   type: "payment",
   amount: 5000,
   sale_id: null,
-  cashier_id: null,
+  cashier_id: "user-1",
   note: null,
   store_id: "store-1",
   created_at: "",
@@ -95,6 +95,7 @@ describe("recordPayment", () => {
       amount: 5000,
       note: null,
       store_id: "store-1",
+      cashier_id: "user-1",
     });
     expect(logInsertSpy).toHaveBeenCalledWith(expect.objectContaining({ action_type: "customer_payment_recorded" }));
     expect(result).toEqual(INSERTED_TRANSACTION);
