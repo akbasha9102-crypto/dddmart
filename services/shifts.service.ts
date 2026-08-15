@@ -64,3 +64,86 @@ export async function openShift(
 
   return data;
 }
+
+/** Sum of a cashier's cash-paid sales in [fromIso, toIso]. */
+export async function getCashSalesSum(supabase: Client, cashierId: string, fromIso: string, toIso: string): Promise<number> {
+  const { data, error } = await supabase
+    .from("sales")
+    .select("total_amount")
+    .eq("cashier_id", cashierId)
+    .eq("payment_method", "cash")
+    .gte("created_at", fromIso)
+    .lte("created_at", toIso);
+
+  if (error) throw error;
+  return (data ?? []).reduce((sum, row) => sum + row.total_amount, 0);
+}
+
+/** Sum of cash debt payments this cashier personally collected in [fromIso, toIso]. */
+export async function getCashDebtPaymentsSum(supabase: Client, cashierId: string, fromIso: string, toIso: string): Promise<number> {
+  const { data, error } = await supabase
+    .from("customer_transactions")
+    .select("amount")
+    .eq("cashier_id", cashierId)
+    .eq("type", "payment")
+    .gte("created_at", fromIso)
+    .lte("created_at", toIso);
+
+  if (error) throw error;
+  return (data ?? []).reduce((sum, row) => sum + row.amount, 0);
+}
+
+/**
+ * Sum of refunds this cashier personally processed (returns.actor_id) in
+ * [fromIso, toIso], counted ONLY when the original sale was paid in cash --
+ * a return on a credit-sale item reduces the customer's debt, not the cash
+ * drawer, so it's excluded. Attribution is by who PROCESSED the return
+ * (actor_id), not who made the original sale, since it's whoever is
+ * physically handing back the cash during their own shift.
+ */
+export async function getCashRefundsSum(supabase: Client, cashierId: string, fromIso: string, toIso: string): Promise<number> {
+  const { data: returnsData, error: returnsError } = await supabase
+    .from("returns")
+    .select("sale_id, refund_amount")
+    .eq("actor_id", cashierId)
+    .gte("created_at", fromIso)
+    .lte("created_at", toIso);
+
+  if (returnsError) throw returnsError;
+  const returns = returnsData ?? [];
+  if (returns.length === 0) return 0;
+
+  const saleIds = Array.from(new Set(returns.map((row) => row.sale_id)));
+  const { data: salesData, error: salesError } = await supabase.from("sales").select("id, payment_method").in("id", saleIds);
+  if (salesError) throw salesError;
+
+  const paymentMethodBySaleId = new Map((salesData ?? []).map((sale) => [sale.id, sale.payment_method]));
+
+  return returns.reduce((sum, row) => {
+    return paymentMethodBySaleId.get(row.sale_id) === "cash" ? sum + row.refund_amount : sum;
+  }, 0);
+}
+
+/**
+ * How much cash SHOULD be in the drawer right now for this shift:
+ * opening balance + cash sales + cash debt payments - cash refunds, all
+ * attributed to the shift's cashier within [opened_at, closeTime].
+ *
+ * A null cashier_id (only possible if the cashier's profile was deleted
+ * after the shift opened) has nothing to attribute activity to, so this
+ * falls back to just the opening balance rather than querying with a null id.
+ */
+export async function calculateExpectedAmount(supabase: Client, shift: Shift, closeTime: Date): Promise<number> {
+  if (!shift.cashier_id) return shift.opening_balance;
+
+  const fromIso = shift.opened_at;
+  const toIso = closeTime.toISOString();
+
+  const [cashSales, cashPayments, cashRefunds] = await Promise.all([
+    getCashSalesSum(supabase, shift.cashier_id, fromIso, toIso),
+    getCashDebtPaymentsSum(supabase, shift.cashier_id, fromIso, toIso),
+    getCashRefundsSum(supabase, shift.cashier_id, fromIso, toIso),
+  ]);
+
+  return shift.opening_balance + cashSales + cashPayments - cashRefunds;
+}
