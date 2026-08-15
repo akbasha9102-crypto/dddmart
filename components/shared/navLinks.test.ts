@@ -27,7 +27,7 @@ describe("isSettingsPath", () => {
 describe("visibleSettingsLinks", () => {
   it("includes admin-only links for an admin role", () => {
     const hrefs = visibleSettingsLinks("admin").map((link) => link.href);
-    expect(hrefs).toEqual(["/sales", "/customers", "/archive", "/employees", "/settings/store"]);
+    expect(hrefs).toEqual(["/sales", "/customers", "/archive", "/employees", "/suppliers", "/settings/store"]);
   });
 
   it("excludes admin-only links for a cashier role", () => {
