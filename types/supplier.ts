@@ -1,4 +1,5 @@
 import type { Database } from "./database.types";
+import type { Product } from "./product";
 
 export type Supplier = Database["public"]["Tables"]["suppliers"]["Row"];
 export type SupplierInsert = Database["public"]["Tables"]["suppliers"]["Insert"];
@@ -14,4 +15,8 @@ export type SupplierBalance = Database["public"]["Views"]["supplier_balances"]["
 
 export interface SupplierWithBalance extends Supplier {
   balance: number;
+}
+
+export interface SupplierProductWithDetails extends SupplierProduct {
+  product: Product;
 }

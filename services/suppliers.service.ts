@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import type { Supplier, SupplierUpdate, SupplierWithBalance, SupplierTransaction } from "@/types/supplier";
+import type {
+  Supplier,
+  SupplierUpdate,
+  SupplierWithBalance,
+  SupplierTransaction,
+  SupplierProduct,
+  SupplierProductWithDetails,
+} from "@/types/supplier";
 import { logOperation } from "@/services/archive.service";
 
 type Client = SupabaseClient<Database>;
@@ -230,4 +237,76 @@ export async function recordSupplierPayment(
   });
 
   return data;
+}
+
+/** Products linked to one supplier, newest link first, each joined with its full product row. */
+export async function getSupplierProducts(supabase: Client, supplierId: string): Promise<SupplierProductWithDetails[]> {
+  const { data, error } = await supabase
+    .from("supplier_products")
+    .select("*, product:products(*)")
+    .eq("supplier_id", supplierId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as SupplierProductWithDetails[];
+}
+
+export interface LinkSupplierProductInput {
+  supplierId: string;
+  productId: string;
+  costPrice?: number | null;
+}
+
+/** Links a product to a supplier, or updates the cost_price if the pair is already linked (upsert on the (supplier_id, product_id) unique constraint). Not audit-logged — routine configuration, not a financial event. */
+export async function linkSupplierProduct(
+  supabase: Client,
+  input: LinkSupplierProductInput,
+  storeId: string,
+): Promise<SupplierProduct> {
+  const { data, error } = await supabase
+    .from("supplier_products")
+    .upsert(
+      {
+        supplier_id: input.supplierId,
+        product_id: input.productId,
+        cost_price: input.costPrice ?? null,
+        store_id: storeId,
+      },
+      { onConflict: "supplier_id,product_id" },
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/** Removes a supplier↔product link. Not audit-logged, same reasoning as linkSupplierProduct. */
+export async function unlinkSupplierProduct(supabase: Client, supplierId: string, productId: string): Promise<void> {
+  const { error } = await supabase.from("supplier_products").delete().eq("supplier_id", supplierId).eq("product_id", productId);
+
+  if (error) throw error;
+}
+
+export interface SupplierDetailData {
+  supplier: Supplier;
+  balance: number;
+  transactions: SupplierTransaction[];
+  products: SupplierProductWithDetails[];
+}
+
+/** Full detail for the supplier-detail screen: the supplier row, its live balance, its transaction history (newest first), and its linked products. */
+export async function getSupplier(supabase: Client, id: string): Promise<SupplierDetailData> {
+  const { data: supplier, error } = await supabase.from("suppliers").select("*").eq("id", id).single();
+  if (error) throw error;
+
+  const [balance, transactionsResult, products] = await Promise.all([
+    getSupplierBalance(supabase, id),
+    supabase.from("supplier_transactions").select("*").eq("supplier_id", id).order("created_at", { ascending: false }),
+    getSupplierProducts(supabase, id),
+  ]);
+
+  if (transactionsResult.error) throw transactionsResult.error;
+
+  return { supplier, balance, transactions: transactionsResult.data ?? [], products };
 }

@@ -1,8 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupplierBalance, createSupplier, recordSupplierPurchase, recordSupplierPayment } from "./suppliers.service";
+import {
+  getSupplierBalance,
+  createSupplier,
+  recordSupplierPurchase,
+  recordSupplierPayment,
+  linkSupplierProduct,
+  unlinkSupplierProduct,
+  getSupplierProducts,
+} from "./suppliers.service";
 import type { Database } from "@/types/database.types";
-import type { Supplier, SupplierTransaction } from "@/types/supplier";
+import type { Supplier, SupplierTransaction, SupplierProduct } from "@/types/supplier";
 
 const INSERTED_SUPPLIER: Supplier = {
   id: "supplier-1",
@@ -221,5 +229,57 @@ describe("recordSupplierPayment", () => {
     });
     expect(logInsertSpy).toHaveBeenCalledWith(expect.objectContaining({ action_type: "supplier_payment_recorded" }));
     expect(result).toEqual(INSERTED_TRANSACTION);
+  });
+});
+
+describe("linkSupplierProduct", () => {
+  it("upserts on (supplier_id, product_id) so re-linking updates cost instead of erroring", async () => {
+    const upsertedRow: SupplierProduct = {
+      id: "link-1",
+      supplier_id: "supplier-1",
+      product_id: "product-1",
+      cost_price: 1500,
+      store_id: "store-1",
+      created_at: "",
+    };
+    const upsertSpy = vi.fn(() => ({
+      select: () => ({
+        single: async () => ({ data: upsertedRow, error: null }),
+      }),
+    }));
+    const supabase = {
+      from: (table: string) => {
+        if (table === "supplier_products") return { upsert: upsertSpy };
+        throw new Error(`unexpected table ${table}`);
+      },
+    } as unknown as SupabaseClient<Database>;
+
+    const result = await linkSupplierProduct(supabase, { supplierId: "supplier-1", productId: "product-1", costPrice: 1500 }, "store-1");
+
+    expect(upsertSpy).toHaveBeenCalledWith(
+      { supplier_id: "supplier-1", product_id: "product-1", cost_price: 1500, store_id: "store-1" },
+      { onConflict: "supplier_id,product_id" },
+    );
+    expect(result).toEqual(upsertedRow);
+  });
+});
+
+describe("unlinkSupplierProduct", () => {
+  it("deletes the join row for the given supplier/product pair", async () => {
+    const eqSecondSpy = vi.fn(async () => ({ error: null }));
+    const eqFirstSpy = vi.fn(() => ({ eq: eqSecondSpy }));
+    const deleteSpy = vi.fn(() => ({ eq: eqFirstSpy }));
+    const supabase = {
+      from: (table: string) => {
+        if (table === "supplier_products") return { delete: deleteSpy };
+        throw new Error(`unexpected table ${table}`);
+      },
+    } as unknown as SupabaseClient<Database>;
+
+    await unlinkSupplierProduct(supabase, "supplier-1", "product-1");
+
+    expect(deleteSpy).toHaveBeenCalled();
+    expect(eqFirstSpy).toHaveBeenCalledWith("supplier_id", "supplier-1");
+    expect(eqSecondSpy).toHaveBeenCalledWith("product_id", "product-1");
   });
 });
