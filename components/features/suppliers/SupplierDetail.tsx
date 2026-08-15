@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { SupplierProductPicker } from "@/components/features/suppliers/SupplierProductPicker";
 
 interface SupplierDetailProps {
   detail: SupplierDetailData;
@@ -22,7 +23,7 @@ interface SupplierDetailProps {
 /** Full transaction history + purchase/payment recording for one supplier. Linked-products management is added by SupplierProductPicker (rendered by the caller alongside this component). */
 export function SupplierDetail({ detail, onBack, onChanged }: SupplierDetailProps) {
   const { user, storeId } = useAuth();
-  const { supplier, balance, transactions } = detail;
+  const { supplier, balance, transactions, products } = detail;
 
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [purchaseAmount, setPurchaseAmount] = useState("");
@@ -173,6 +174,8 @@ export function SupplierDetail({ detail, onBack, onChanged }: SupplierDetailProp
           </Card>
         )}
       </div>
+
+      <SupplierProductPicker supplierId={supplier.id} products={products} onChanged={onChanged} />
 
       <Modal open={isPurchaseModalOpen} onClose={() => setIsPurchaseModalOpen(false)} title="تسجيل فاتورة شراء">
         <form onSubmit={handleSubmitPurchase} className="flex flex-col gap-4">
