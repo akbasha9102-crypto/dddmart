@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupplierBalance, createSupplier } from "./suppliers.service";
+import { getSupplierBalance, createSupplier, recordSupplierPurchase, recordSupplierPayment } from "./suppliers.service";
 import type { Database } from "@/types/database.types";
-import type { Supplier } from "@/types/supplier";
+import type { Supplier, SupplierTransaction } from "@/types/supplier";
 
 const INSERTED_SUPPLIER: Supplier = {
   id: "supplier-1",
@@ -107,5 +107,119 @@ describe("createSupplier", () => {
     await createSupplier(supabase, { name: "شركة الفرات", openingBalance: 25000 }, "user-1", "store-1");
 
     expect(insertSpy).toHaveBeenCalledWith(expect.objectContaining({ opening_balance: 25000 }));
+  });
+});
+
+const INSERTED_TRANSACTION: SupplierTransaction = {
+  id: "txn-1",
+  supplier_id: "supplier-1",
+  type: "payment",
+  amount: 5000,
+  note: null,
+  store_id: "store-1",
+  created_at: "",
+};
+
+function createFakeSupabaseForLedger(options: { balance: number | null; insertedTransaction: SupplierTransaction }): {
+  supabase: SupabaseClient<Database>;
+  insertSpy: ReturnType<typeof vi.fn>;
+  logInsertSpy: ReturnType<typeof vi.fn>;
+} {
+  const insertSpy = vi.fn(() => ({
+    select: () => ({
+      single: async () => ({ data: options.insertedTransaction, error: null }),
+    }),
+  }));
+  const logInsertSpy = vi.fn(async () => ({ data: null, error: null }));
+
+  const supabase = {
+    from: (table: string) => {
+      if (table === "supplier_balances") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: options.balance === null ? null : { supplier_id: "supplier-1", balance: options.balance },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "supplier_transactions") {
+        return { insert: insertSpy };
+      }
+      if (table === "operations_log") {
+        return { insert: logInsertSpy };
+      }
+      throw new Error(`unexpected table ${table}`);
+    },
+  } as unknown as SupabaseClient<Database>;
+
+  return { supabase, insertSpy, logInsertSpy };
+}
+
+describe("recordSupplierPurchase", () => {
+  it("rejects an amount of zero or less", async () => {
+    const { supabase } = createFakeSupabaseForLedger({ balance: 0, insertedTransaction: INSERTED_TRANSACTION });
+
+    await expect(
+      recordSupplierPurchase(supabase, { supplierId: "supplier-1", amount: 0 }, "user-1", "store-1"),
+    ).rejects.toThrow("أكبر من صفر");
+  });
+
+  it("inserts a purchase transaction and logs supplier_purchase_recorded", async () => {
+    const { supabase, insertSpy, logInsertSpy } = createFakeSupabaseForLedger({
+      balance: 0,
+      insertedTransaction: { ...INSERTED_TRANSACTION, type: "purchase", amount: 12000 },
+    });
+
+    await recordSupplierPurchase(supabase, { supplierId: "supplier-1", amount: 12000 }, "user-1", "store-1");
+
+    expect(insertSpy).toHaveBeenCalledWith({
+      supplier_id: "supplier-1",
+      type: "purchase",
+      amount: 12000,
+      note: null,
+      store_id: "store-1",
+    });
+    expect(logInsertSpy).toHaveBeenCalledWith(expect.objectContaining({ action_type: "supplier_purchase_recorded" }));
+  });
+});
+
+describe("recordSupplierPayment", () => {
+  it("rejects an amount of zero or less", async () => {
+    const { supabase } = createFakeSupabaseForLedger({ balance: 10000, insertedTransaction: INSERTED_TRANSACTION });
+
+    await expect(
+      recordSupplierPayment(supabase, { supplierId: "supplier-1", amount: 0 }, "user-1", "store-1"),
+    ).rejects.toThrow("أكبر من صفر");
+  });
+
+  it("rejects an amount greater than the current balance, and includes the actual remaining balance in the error", async () => {
+    const { supabase } = createFakeSupabaseForLedger({ balance: 3000, insertedTransaction: INSERTED_TRANSACTION });
+
+    await expect(
+      recordSupplierPayment(supabase, { supplierId: "supplier-1", amount: 5000 }, "user-1", "store-1"),
+    ).rejects.toThrow("المستحق: 3000");
+  });
+
+  it("inserts a payment transaction and logs supplier_payment_recorded on the happy path", async () => {
+    const { supabase, insertSpy, logInsertSpy } = createFakeSupabaseForLedger({
+      balance: 10000,
+      insertedTransaction: INSERTED_TRANSACTION,
+    });
+
+    const result = await recordSupplierPayment(supabase, { supplierId: "supplier-1", amount: 5000 }, "user-1", "store-1");
+
+    expect(insertSpy).toHaveBeenCalledWith({
+      supplier_id: "supplier-1",
+      type: "payment",
+      amount: 5000,
+      note: null,
+      store_id: "store-1",
+    });
+    expect(logInsertSpy).toHaveBeenCalledWith(expect.objectContaining({ action_type: "supplier_payment_recorded" }));
+    expect(result).toEqual(INSERTED_TRANSACTION);
   });
 });

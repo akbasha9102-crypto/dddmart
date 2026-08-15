@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import type { Supplier, SupplierUpdate, SupplierWithBalance } from "@/types/supplier";
+import type { Supplier, SupplierUpdate, SupplierWithBalance, SupplierTransaction } from "@/types/supplier";
 import { logOperation } from "@/services/archive.service";
 
 type Client = SupabaseClient<Database>;
@@ -134,4 +134,100 @@ export async function archiveSupplier(supabase: Client, id: string, actorId: str
     description: `تم أرشفة المورد "${data.name}"`,
     storeId,
   });
+}
+
+export interface RecordSupplierPurchaseInput {
+  supplierId: string;
+  amount: number;
+  note?: string | null;
+}
+
+/** Records a purchase invoice against a supplier's balance — increases what the merchant owes them. Entered manually; not wired to the inventory-receiving flow (see the spec's "out of scope" note). */
+export async function recordSupplierPurchase(
+  supabase: Client,
+  input: RecordSupplierPurchaseInput,
+  actorId: string | null,
+  storeId: string,
+): Promise<SupplierTransaction> {
+  if (input.amount <= 0) {
+    throw new Error("مبلغ الفاتورة يجب أن يكون أكبر من صفر");
+  }
+
+  const { data, error } = await supabase
+    .from("supplier_transactions")
+    .insert({
+      supplier_id: input.supplierId,
+      type: "purchase",
+      amount: input.amount,
+      note: input.note ?? null,
+      store_id: storeId,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  await logOperation(supabase, {
+    userId: actorId,
+    actionType: "supplier_purchase_recorded",
+    entityType: "supplier",
+    entityId: input.supplierId,
+    description: `تم تسجيل فاتورة شراء بقيمة ${input.amount} من المورد`,
+    storeId,
+  });
+
+  return data;
+}
+
+export interface RecordSupplierPaymentInput {
+  supplierId: string;
+  amount: number;
+  note?: string | null;
+}
+
+/**
+ * Records a payment to a supplier, reducing the balance owed. Partial
+ * payments under the current balance are fine; overpaying past the
+ * balance is rejected (Arabic error shows the actual remaining balance)
+ * — same cap customers.service.ts#recordPayment uses.
+ */
+export async function recordSupplierPayment(
+  supabase: Client,
+  input: RecordSupplierPaymentInput,
+  actorId: string | null,
+  storeId: string,
+): Promise<SupplierTransaction> {
+  if (input.amount <= 0) {
+    throw new Error("مبلغ الدفعة يجب أن يكون أكبر من صفر");
+  }
+
+  const currentBalance = await getSupplierBalance(supabase, input.supplierId);
+  if (input.amount > currentBalance) {
+    throw new Error(`مبلغ الدفعة أكبر من الرصيد المستحق (المستحق: ${currentBalance})`);
+  }
+
+  const { data, error } = await supabase
+    .from("supplier_transactions")
+    .insert({
+      supplier_id: input.supplierId,
+      type: "payment",
+      amount: input.amount,
+      note: input.note ?? null,
+      store_id: storeId,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  await logOperation(supabase, {
+    userId: actorId,
+    actionType: "supplier_payment_recorded",
+    entityType: "supplier",
+    entityId: input.supplierId,
+    description: `تم تسجيل دفعة بقيمة ${input.amount} للمورد`,
+    storeId,
+  });
+
+  return data;
 }
