@@ -22,9 +22,15 @@ export type OperationActionType =
   | "customer_created"
   | "customer_updated"
   | "customer_archived"
-  | "customer_payment_recorded";
-export type OperationEntityType = "product" | "category" | "sale" | "stock" | "customer";
+  | "customer_payment_recorded"
+  | "supplier_created"
+  | "supplier_updated"
+  | "supplier_archived"
+  | "supplier_purchase_recorded"
+  | "supplier_payment_recorded";
+export type OperationEntityType = "product" | "category" | "sale" | "stock" | "customer" | "supplier";
 export type CustomerTransactionType = "sale" | "payment";
+export type SupplierTransactionType = "purchase" | "payment";
 
 export interface Database {
   public: {
@@ -666,6 +672,125 @@ export interface Database {
           },
         ];
       };
+      suppliers: {
+        Row: {
+          id: string;
+          name: string;
+          phone: string | null;
+          address: string | null;
+          note: string | null;
+          opening_balance: number;
+          is_active: boolean;
+          store_id: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          phone?: string | null;
+          address?: string | null;
+          note?: string | null;
+          opening_balance?: number;
+          is_active?: boolean;
+          store_id: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          phone?: string | null;
+          address?: string | null;
+          note?: string | null;
+          opening_balance?: number;
+          is_active?: boolean;
+          store_id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      supplier_transactions: {
+        Row: {
+          id: string;
+          supplier_id: string;
+          type: SupplierTransactionType;
+          amount: number;
+          note: string | null;
+          store_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          supplier_id: string;
+          type: SupplierTransactionType;
+          amount: number;
+          note?: string | null;
+          store_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          supplier_id?: string;
+          type?: SupplierTransactionType;
+          amount?: number;
+          note?: string | null;
+          store_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "supplier_transactions_supplier_id_fkey";
+            columns: ["supplier_id"];
+            isOneToOne: false;
+            referencedRelation: "suppliers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      supplier_products: {
+        Row: {
+          id: string;
+          supplier_id: string;
+          product_id: string;
+          cost_price: number | null;
+          store_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          supplier_id: string;
+          product_id: string;
+          cost_price?: number | null;
+          store_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          supplier_id?: string;
+          product_id?: string;
+          cost_price?: number | null;
+          store_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "supplier_products_supplier_id_fkey";
+            columns: ["supplier_id"];
+            isOneToOne: false;
+            referencedRelation: "suppliers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "supplier_products_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       operations_log: {
         Row: {
           id: string;
@@ -715,6 +840,13 @@ export interface Database {
       customer_balances: {
         Row: {
           customer_id: string;
+          balance: number;
+        };
+        Relationships: [];
+      };
+      supplier_balances: {
+        Row: {
+          supplier_id: string;
           balance: number;
         };
         Relationships: [];

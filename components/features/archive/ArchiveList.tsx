@@ -29,6 +29,11 @@ const ACTION_ICON_MAP: Record<OperationActionType, LucideIcon> = {
   customer_updated: Pencil,
   customer_archived: Archive,
   customer_payment_recorded: Banknote,
+  supplier_created: UserPlus,
+  supplier_updated: Pencil,
+  supplier_archived: Archive,
+  supplier_purchase_recorded: ShoppingCart,
+  supplier_payment_recorded: Banknote,
 };
 
 /** Chronological (newest first) list of logged operations — a list rather than a table since Arabic sentences vary in length. */
