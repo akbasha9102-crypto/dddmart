@@ -1,10 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { getSupplier } from "@/services/suppliers.service";
+import type { SupplierDetailData } from "@/services/suppliers.service";
 import { useAuth } from "@/context/AuthContext";
 import { useSuppliers } from "@/hooks/useSuppliers";
 import type { Supplier, SupplierWithBalance } from "@/types/supplier";
 import { SupplierList } from "@/components/features/suppliers/SupplierList";
+import { SupplierDetail } from "@/components/features/suppliers/SupplierDetail";
 import { SupplierForm } from "@/components/features/suppliers/SupplierForm";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -21,6 +25,10 @@ export default function SuppliersPage() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<SupplierDetailData | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+
   if (!isAdmin) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 p-10 text-center">
@@ -30,8 +38,20 @@ export default function SuppliersPage() {
     );
   }
 
-  function handleSelect(_supplier: SupplierWithBalance) {
-    // Wired up in the next task alongside SupplierDetail.
+  async function loadDetail(id: string) {
+    setIsLoadingDetail(true);
+    try {
+      const supabase = createClient();
+      const result = await getSupplier(supabase, id);
+      setDetail(result);
+    } finally {
+      setIsLoadingDetail(false);
+    }
+  }
+
+  function handleSelect(supplier: SupplierWithBalance) {
+    setSelectedSupplierId(supplier.id);
+    void loadDetail(supplier.id);
   }
 
   function handleEdit(supplier: SupplierWithBalance) {
@@ -42,6 +62,30 @@ export default function SuppliersPage() {
   function openAddModal() {
     setEditingSupplier(null);
     setIsFormModalOpen(true);
+  }
+
+  function handleBack() {
+    setSelectedSupplierId(null);
+    setDetail(null);
+  }
+
+  if (selectedSupplierId) {
+    return (
+      <div className="flex flex-col gap-6">
+        {isLoadingDetail || !detail ? (
+          <p className="p-6 text-center text-gray-400">جارٍ التحميل...</p>
+        ) : (
+          <SupplierDetail
+            detail={detail}
+            onBack={handleBack}
+            onChanged={() => {
+              void loadDetail(selectedSupplierId);
+              void suppliers.reload();
+            }}
+          />
+        )}
+      </div>
+    );
   }
 
   return (
