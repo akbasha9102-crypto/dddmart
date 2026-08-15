@@ -29,7 +29,7 @@ New migration `00000000000018_cash_drawer_shifts.sql`:
 ```sql
 create table shifts (
   id uuid primary key default gen_random_uuid(),
-  cashier_id uuid not null references profiles (id) on delete cascade,
+  cashier_id uuid references profiles (id) on delete set null,
   store_id uuid not null references stores (id),
   status text not null default 'open' check (status in ('open', 'closed')),
   opening_balance numeric(12, 2) not null check (opening_balance >= 0),
@@ -70,6 +70,12 @@ create policy "close own shift or admin force-close" on shifts for update to aut
   with check (store_id = current_store_id());
 ```
 
+- `cashier_id` is nullable with `on delete set null` (not `not null`/
+  `cascade`) — matches `returns.actor_id`/`stock_damages.actor_id`
+  elsewhere in this repo, so a shift's financial audit trail survives
+  even if the employee's profile is later deleted. At insert time it's
+  always the current authenticated user's id (enforced by the RLS
+  `with check`), so this only matters for historical rows.
 - `expected_amount`/`counted_amount`/`difference` are all null while
   `status = 'open'` — populated together, only at close time.
 - Forced close (admin closes a shift the cashier left open): `counted_amount`
