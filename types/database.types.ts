@@ -6,6 +6,7 @@
 
 export type PaymentMethod = "cash" | "credit";
 export type UserRole = "admin" | "cashier";
+export type ShiftStatus = "open" | "closed";
 export type OperationActionType =
   | "sale_created"
   | "product_created"
@@ -27,8 +28,10 @@ export type OperationActionType =
   | "supplier_updated"
   | "supplier_archived"
   | "supplier_purchase_recorded"
-  | "supplier_payment_recorded";
-export type OperationEntityType = "product" | "category" | "sale" | "stock" | "customer" | "supplier";
+  | "supplier_payment_recorded"
+  | "shift_opened"
+  | "shift_closed";
+export type OperationEntityType = "product" | "category" | "sale" | "stock" | "customer" | "supplier" | "shift";
 export type CustomerTransactionType = "sale" | "payment";
 export type SupplierTransactionType = "purchase" | "payment";
 
@@ -553,6 +556,76 @@ export interface Database {
           },
         ];
       };
+      shifts: {
+        Row: {
+          id: string;
+          cashier_id: string | null;
+          store_id: string;
+          status: ShiftStatus;
+          opening_balance: number;
+          opened_at: string;
+          closed_at: string | null;
+          expected_amount: number | null;
+          counted_amount: number | null;
+          difference: number | null;
+          forced_closed_by: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          cashier_id?: string | null;
+          store_id: string;
+          status?: ShiftStatus;
+          opening_balance: number;
+          opened_at?: string;
+          closed_at?: string | null;
+          expected_amount?: number | null;
+          counted_amount?: number | null;
+          difference?: number | null;
+          forced_closed_by?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          cashier_id?: string | null;
+          store_id?: string;
+          status?: ShiftStatus;
+          opening_balance?: number;
+          opened_at?: string;
+          closed_at?: string | null;
+          expected_amount?: number | null;
+          counted_amount?: number | null;
+          difference?: number | null;
+          forced_closed_by?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "shifts_cashier_id_fkey";
+            columns: ["cashier_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "shifts_store_id_fkey";
+            columns: ["store_id"];
+            isOneToOne: false;
+            referencedRelation: "stores";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "shifts_forced_closed_by_fkey";
+            columns: ["forced_closed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       held_sales: {
         Row: {
           id: string;
@@ -631,6 +704,7 @@ export interface Database {
           type: CustomerTransactionType;
           amount: number;
           sale_id: string | null;
+          cashier_id: string | null;
           note: string | null;
           store_id: string;
           created_at: string;
@@ -641,6 +715,7 @@ export interface Database {
           type: CustomerTransactionType;
           amount: number;
           sale_id?: string | null;
+          cashier_id?: string | null;
           note?: string | null;
           store_id: string;
           created_at?: string;
@@ -651,6 +726,7 @@ export interface Database {
           type?: CustomerTransactionType;
           amount?: number;
           sale_id?: string | null;
+          cashier_id?: string | null;
           note?: string | null;
           store_id?: string;
           created_at?: string;
@@ -668,6 +744,13 @@ export interface Database {
             columns: ["sale_id"];
             isOneToOne: false;
             referencedRelation: "sales";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "customer_transactions_cashier_id_fkey";
+            columns: ["cashier_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];

@@ -10,6 +10,7 @@ const INSERTED_TRANSACTION: CustomerTransaction = {
   type: "payment",
   amount: 5000,
   sale_id: null,
+  cashier_id: null,
   note: null,
   store_id: "store-1",
   created_at: "",

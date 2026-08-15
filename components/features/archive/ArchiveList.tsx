@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Banknote, PackagePlus, PackageX, Pencil, Plus, ShoppingCart, Trash2, Undo2, UserPlus } from "lucide-react";
+import { Archive, Banknote, Clock, PackagePlus, PackageX, Pencil, Plus, ShoppingCart, Trash2, Undo2, UserPlus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { OperationLogWithActor } from "@/types/archive";
 import type { OperationActionType } from "@/types/database.types";
@@ -34,6 +34,8 @@ const ACTION_ICON_MAP: Record<OperationActionType, LucideIcon> = {
   supplier_archived: Archive,
   supplier_purchase_recorded: ShoppingCart,
   supplier_payment_recorded: Banknote,
+  shift_opened: Clock,
+  shift_closed: Clock,
 };
 
 /** Chronological (newest first) list of logged operations — a list rather than a table since Arabic sentences vary in length. */
