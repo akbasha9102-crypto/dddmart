@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import type { Shift } from "@/types/shifts";
+import type { Shift, ShiftWithCashierName } from "@/types/shifts";
 import { logOperation } from "@/services/archive.service";
 
 type Client = SupabaseClient<Database>;
@@ -208,4 +208,35 @@ export async function closeShift(
   });
 
   return updated;
+}
+
+/**
+ * All shifts opened in [startDate, endDate], newest first, with each
+ * cashier's name resolved via a batched profiles lookup -- same
+ * "غير معروف" fallback convention used by getSalesForExport/getCashierRanking/listOperations.
+ */
+export async function getShiftsForReport(supabase: Client, startDate: Date, endDate: Date): Promise<ShiftWithCashierName[]> {
+  const { data: shiftsData, error } = await supabase
+    .from("shifts")
+    .select("*")
+    .gte("opened_at", startDate.toISOString())
+    .lte("opened_at", endDate.toISOString())
+    .order("opened_at", { ascending: false });
+
+  if (error) throw error;
+  const shifts = shiftsData ?? [];
+  if (shifts.length === 0) return [];
+
+  const cashierIds = Array.from(new Set(shifts.map((shift) => shift.cashier_id).filter((id): id is string => id !== null)));
+  const nameById = new Map<string, string>();
+  if (cashierIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase.from("profiles").select("id, full_name").in("id", cashierIds);
+    if (profilesError) throw profilesError;
+    (profiles ?? []).forEach((profile) => nameById.set(profile.id, profile.full_name));
+  }
+
+  return shifts.map((shift) => ({
+    ...shift,
+    cashierName: shift.cashier_id ? (nameById.get(shift.cashier_id) ?? "غير معروف") : "غير معروف",
+  }));
 }
