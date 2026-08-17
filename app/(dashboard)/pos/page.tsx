@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Volume2, VolumeX } from "lucide-react";
 import { usePOSContext } from "@/context/POSContext";
 import { useAuth } from "@/context/AuthContext";
@@ -66,6 +67,7 @@ export default function POSPage() {
   const [overLimitWarning, setOverLimitWarning] = useState<string | null>(null);
 
   const { isMuted, toggle: toggleMuted } = useSoundSettings();
+  const router = useRouter();
 
   const { user, storeId, isLoading: isAuthLoading } = useAuth();
   const { shift, isLoading: isShiftLoading, isSubmitting: isShiftSubmitting, error: shiftError, open: openShiftAction, close: closeShiftAction } = useShift({
@@ -341,8 +343,13 @@ export default function POSPage() {
           error={shiftError}
           onClose={() => setIsCloseShiftOpen(false)}
           onConfirm={async (counted) => {
-            await closeShiftAction(counted);
+            const succeeded = await closeShiftAction(counted);
             setIsCloseShiftOpen(false);
+            if (!succeeded) return;
+            const supabase = createClient();
+            await supabase.auth.signOut();
+            router.replace("/login");
+            router.refresh();
           }}
         />
       ) : null}

@@ -63,15 +63,17 @@ export function useShift({ cashierId, storeId }: UseShiftOptions) {
 
   const close = useCallback(
     async (countedAmount: number) => {
-      if (!shift || !storeId) return;
+      if (!shift || !storeId) return false;
       setError(null);
       setIsSubmitting(true);
       try {
         const supabase = createClient();
         await closeShift(supabase, { shiftId: shift.id, countedAmount }, cashierId, storeId, false);
         setShift(null);
+        return true;
       } catch (err) {
         setError(err instanceof Error ? err.message : "تعذر إغلاق الوردية");
+        return false;
       } finally {
         setIsSubmitting(false);
       }
