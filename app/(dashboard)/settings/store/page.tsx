@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
 import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
+import { ChangePasswordForm } from "@/components/features/settings/ChangePasswordForm";
 
 export default function StoreSettingsPage() {
   const { role, storeId } = useAuth();
@@ -22,6 +23,7 @@ export default function StoreSettingsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [passwordToastMessage, setPasswordToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (store) {
@@ -85,7 +87,15 @@ export default function StoreSettingsPage() {
         </form>
       )}
 
+      <div className="flex flex-col gap-4 border-t border-gray-200 pt-6">
+        <h2 className="text-lg font-semibold text-gray-900">تغيير كلمة السر</h2>
+        <ChangePasswordForm onSuccess={() => setPasswordToastMessage("تم تغيير كلمة المرور")} />
+      </div>
+
       {toastMessage ? <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} /> : null}
+      {passwordToastMessage ? (
+        <Toast message={passwordToastMessage} onDismiss={() => setPasswordToastMessage(null)} />
+      ) : null}
     </div>
   );
 }
