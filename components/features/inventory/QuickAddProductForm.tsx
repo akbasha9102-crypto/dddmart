@@ -112,20 +112,18 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
         }}
       />
 
-      <div className={isAdminRole(role) ? "grid grid-cols-2 gap-4" : ""}>
-        {isAdminRole(role) ? (
-          <Input
-            label="سعر الشراء (للسلعة الواحدة)"
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step="0.01"
-            value={costPrice}
-            onChange={(event) => setCostPrice(event.target.value)}
-            className="h-14 text-lg"
-            required
-          />
-        ) : null}
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="سعر الشراء (للسلعة الواحدة)"
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step="0.01"
+          value={costPrice}
+          onChange={(event) => setCostPrice(event.target.value)}
+          className="h-14 text-lg"
+          required
+        />
         <Input
           label="سعر البيع (للسلعة الواحدة)"
           type="number"
