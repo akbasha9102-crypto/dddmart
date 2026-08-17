@@ -19,3 +19,13 @@ export function isAdminRole(role: UserRole | string | null | undefined): boolean
 export function isSelfLockout(targetId: string, callerId: string, willDeactivate: boolean): boolean {
   return willDeactivate && targetId === callerId;
 }
+
+/**
+ * True when the admin making the request is the same account as the one
+ * being edited — used to block ALL self-mutation (edit/reset
+ * password/delete) through the employee-management route, not just
+ * self-deactivation.
+ */
+export function isSelfTarget(targetId: string, callerId: string): boolean {
+  return targetId === callerId;
+}

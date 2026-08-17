@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAdminRole, isSelfLockout } from "@/lib/employees/adminCheck";
+import { isAdminRole, isSelfLockout, isSelfTarget } from "@/lib/employees/adminCheck";
 
 describe("isAdminRole", () => {
   it("returns true for an admin role", () => {
@@ -34,5 +34,15 @@ describe("isSelfLockout", () => {
 
   it("allows activating a different account", () => {
     expect(isSelfLockout("user-2", "user-1", false)).toBe(false);
+  });
+});
+
+describe("isSelfTarget", () => {
+  it("returns true when the target id matches the caller id", () => {
+    expect(isSelfTarget("user-1", "user-1")).toBe(true);
+  });
+
+  it("returns false when the target id differs from the caller id", () => {
+    expect(isSelfTarget("user-2", "user-1")).toBe(false);
   });
 });
