@@ -12,6 +12,7 @@ import { CustomerForm } from "@/components/features/customers/CustomerForm";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Toast } from "@/components/ui/Toast";
 import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
 
 export default function CustomersPage() {
@@ -20,6 +21,7 @@ export default function CustomersPage() {
 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [detail, setDetail] = useState<CustomerDetailData | null>(null);
@@ -44,6 +46,11 @@ export default function CustomersPage() {
   function handleEdit(customer: CustomerWithBalance) {
     setEditingCustomer(customer);
     setIsFormModalOpen(true);
+  }
+
+  function handleDeleted(customer: CustomerWithBalance) {
+    setToastMessage(`تم حذف الزبون "${customer.name}"`);
+    void customers.reload();
   }
 
   function openAddModal() {
@@ -99,7 +106,7 @@ export default function CustomersPage() {
       ) : customers.error ? (
         <p className="p-6 text-center text-red-600">{customers.error}</p>
       ) : (
-        <CustomerList customers={customers.data} onSelect={handleSelect} onEdit={handleEdit} />
+        <CustomerList customers={customers.data} onSelect={handleSelect} onEdit={handleEdit} onDeleted={handleDeleted} />
       )}
 
       <Modal
@@ -116,6 +123,8 @@ export default function CustomersPage() {
           onCancel={() => setIsFormModalOpen(false)}
         />
       </Modal>
+
+      {toastMessage ? <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} /> : null}
     </div>
   );
 }

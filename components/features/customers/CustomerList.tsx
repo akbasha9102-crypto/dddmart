@@ -1,18 +1,41 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { archiveCustomer } from "@/services/customers.service";
+import { useAuth } from "@/context/AuthContext";
 import type { CustomerWithBalance } from "@/types/customer";
 import { formatCurrency, cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
+import { ConfirmInline } from "@/components/ui/ConfirmInline";
 
 interface CustomerListProps {
   customers: CustomerWithBalance[];
   onSelect: (customer: CustomerWithBalance) => void;
   onEdit: (customer: CustomerWithBalance) => void;
+  onDeleted: (customer: CustomerWithBalance) => void;
 }
 
 /** Presentational list of customers — mirrors EmployeeList's Card/divide layout. Clicking a row (not the pencil) selects the customer for detail view. */
-export function CustomerList({ customers, onSelect, onEdit }: CustomerListProps) {
+export function CustomerList({ customers, onSelect, onEdit, onDeleted }: CustomerListProps) {
+  const { user, storeId } = useAuth();
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function handleDelete(customer: CustomerWithBalance) {
+    if (!storeId) return;
+    setBusyId(customer.id);
+    try {
+      const supabase = createClient();
+      await archiveCustomer(supabase, customer.id, user?.id ?? null, storeId);
+      setConfirmingDeleteId(null);
+      onDeleted(customer);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (customers.length === 0) {
     return <p className="p-6 text-center text-gray-400">لا يوجد زبائن بعد</p>;
   }
@@ -22,6 +45,23 @@ export function CustomerList({ customers, onSelect, onEdit }: CustomerListProps)
       <div className="flex flex-col divide-y divide-gray-100">
         {customers.map((customer) => {
           const isOverLimit = customer.credit_limit > 0 && customer.balance > customer.credit_limit;
+
+          if (confirmingDeleteId === customer.id) {
+            return (
+              <div key={customer.id} className="p-2">
+                <ConfirmInline
+                  message={
+                    customer.balance > 0
+                      ? `تأكيد حذف الزبون "${customer.name}"؟ لديه رصيد مستحق قدره ${formatCurrency(customer.balance)} — سيبقى محفوظاً في السجلات ولن يظهر في القائمة.`
+                      : `تأكيد حذف الزبون "${customer.name}"؟`
+                  }
+                  confirmLabel="حذف"
+                  onConfirm={() => void handleDelete(customer)}
+                  onCancel={() => setConfirmingDeleteId(null)}
+                />
+              </div>
+            );
+          }
 
           return (
             <div
@@ -59,6 +99,19 @@ export function CustomerList({ customers, onSelect, onEdit }: CustomerListProps)
                   aria-label="تعديل"
                 >
                   <Pencil className="h-4 w-4" />
+                </button>
+
+                <button
+                  type="button"
+                  disabled={busyId === customer.id}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setConfirmingDeleteId(customer.id);
+                  }}
+                  className="rounded-full p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                  aria-label="حذف"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             </div>
