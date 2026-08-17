@@ -5,13 +5,14 @@ import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { syncOutbox } from "@/lib/offline/syncManager";
-import { getOutbox } from "@/lib/offline/db";
+import { getHeldSalesOutbox, getOutbox } from "@/lib/offline/db";
 import { refreshProductCache } from "@/lib/offline/productCache";
 
 interface OfflineContextValue {
   isOnline: boolean;
   pendingCount: number;
   conflictCount: number;
+  pendingHeldCount: number;
   syncNow: () => Promise<void>;
 }
 
@@ -22,11 +23,14 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   const { isOnline } = useOnlineStatus();
   const [pendingCount, setPendingCount] = useState(0);
   const [conflictCount, setConflictCount] = useState(0);
+  const [pendingHeldCount, setPendingHeldCount] = useState(0);
 
   const refreshCounts = useCallback(async () => {
     const outbox = await getOutbox();
     setPendingCount(outbox.filter((sale) => sale.status === "pending" || sale.status === "syncing").length);
     setConflictCount(outbox.filter((sale) => sale.status === "conflict").length);
+    const heldOutbox = await getHeldSalesOutbox();
+    setPendingHeldCount(heldOutbox.filter((sale) => sale.status === "pending" || sale.status === "syncing").length);
   }, []);
 
   const syncNow = useCallback(async () => {
@@ -47,7 +51,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   }, [isOnline, syncNow]);
 
   return (
-    <OfflineContext.Provider value={{ isOnline, pendingCount, conflictCount, syncNow }}>
+    <OfflineContext.Provider value={{ isOnline, pendingCount, conflictCount, pendingHeldCount, syncNow }}>
       {children}
     </OfflineContext.Provider>
   );

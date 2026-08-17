@@ -2,9 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { decrementStock } from "@/services/products.service";
 import { createSale } from "@/services/sales.service";
+import { holdSale } from "@/services/heldSales.service";
 import { toBaseUnits } from "@/lib/units";
-import { getOutbox, setOutbox } from "@/lib/offline/db";
-import { markConflict, markSynced, markSyncing } from "@/lib/offline/outbox";
+import { getHeldSalesOutbox, getOutbox, setHeldSalesOutbox, setOutbox } from "@/lib/offline/db";
+import { markConflict, markHeldSaleSynced, markHeldSaleSyncing, markSynced, markSyncing } from "@/lib/offline/outbox";
 import type { PendingSale } from "@/types/offline";
 
 type Client = SupabaseClient<Database>;
@@ -12,6 +13,7 @@ type Client = SupabaseClient<Database>;
 export interface SyncResult {
   syncedCount: number;
   conflictCount: number;
+  syncedHeldCount: number;
 }
 
 // Prevents concurrent replay runs from a reconnect event firing while a
@@ -30,11 +32,12 @@ let isSyncing = false;
  * replayed.
  */
 export async function syncOutbox(supabase: Client): Promise<SyncResult> {
-  if (isSyncing) return { syncedCount: 0, conflictCount: 0 };
+  if (isSyncing) return { syncedCount: 0, conflictCount: 0, syncedHeldCount: 0 };
   isSyncing = true;
 
   let syncedCount = 0;
   let conflictCount = 0;
+  let syncedHeldCount = 0;
 
   try {
     let outbox = await getOutbox();
@@ -76,11 +79,46 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
         break;
       }
     }
+
+    // Held-sale (تعليق) replay runs AFTER sales replay above completes.
+    // Holding never touches stock (see types/offline.ts), so there's no
+    // conflict path here — just insert the snapshot row via the same
+    // holdSale() the online path uses.
+    let heldOutbox = await getHeldSalesOutbox();
+    const pendingHeld = heldOutbox
+      .filter((sale) => sale.status === "pending")
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    for (const sale of pendingHeld) {
+      heldOutbox = markHeldSaleSyncing(heldOutbox, sale.localId);
+      await setHeldSalesOutbox(heldOutbox);
+
+      try {
+        await holdSale(
+          supabase,
+          {
+            cashierId: sale.cashierId,
+            items: sale.items,
+            discountAmount: sale.discountAmount,
+            note: sale.note,
+          },
+          sale.storeId,
+        );
+
+        heldOutbox = markHeldSaleSynced(heldOutbox, sale.localId);
+        await setHeldSalesOutbox(heldOutbox);
+        syncedHeldCount += 1;
+      } catch {
+        // Same handling as the sales loop above: stop this phase, leave
+        // remaining held sales pending for the next sync attempt.
+        break;
+      }
+    }
   } finally {
     isSyncing = false;
   }
 
-  return { syncedCount, conflictCount };
+  return { syncedCount, conflictCount, syncedHeldCount };
 }
 
 /**

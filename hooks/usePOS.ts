@@ -15,7 +15,7 @@ import type { ProductUnit } from "@/types/product";
 import type { PaymentMethod } from "@/types/database.types";
 import { toBaseUnits } from "@/lib/units";
 import { generateInvoiceNumber } from "@/lib/utils";
-import { addPendingSale } from "@/lib/offline/outbox";
+import { addPendingHeldSale, addPendingSale, getPendingHeldSales, removePendingHeldSale } from "@/lib/offline/outbox";
 import { applyLocalStockDelta, getCachedCatalog, getCachedUnitsList, resolveBarcodeOffline } from "@/lib/offline/productCache";
 
 interface UsePOSOptions {
@@ -314,6 +314,22 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
       if (!storeId) {
         throw new Error("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
       }
+
+      if (!isOnline) {
+        await addPendingHeldSale({
+          localId: crypto.randomUUID(),
+          status: "pending",
+          createdAt: new Date().toISOString(),
+          cashierId,
+          items: cart.items,
+          discountAmount: cart.discountAmount,
+          note,
+          storeId,
+        });
+        cart.clear();
+        return;
+      }
+
       const supabase = createClient();
       await holdSale(
         supabase,
@@ -327,7 +343,7 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
       );
       cart.clear();
     },
-    [cart, cashierId, storeId],
+    [cart, cashierId, isOnline, storeId],
   );
 
   const resumeSale = useCallback(
@@ -338,6 +354,30 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
       const supabase = createClient();
       const { items, discountAmount } = await resumeHeldSale(supabase, id);
       cart.loadItems(items, discountAmount);
+    },
+    [cart],
+  );
+
+  /**
+   * Resumes a held sale still sitting in the local offline outbox (never
+   * synced to Supabase yet) — separate from resumeSale, which only handles
+   * already-synced held_sales rows and stays online-only. Removes the entry
+   * from the outbox once its items are back in the cart so it can't be
+   * resumed twice or replayed by syncManager after the cashier already
+   * pulled it back into the cart.
+   */
+  const resumePendingHeldSale = useCallback(
+    async (localId: string) => {
+      if (cart.items.length > 0) {
+        throw new Error("أفرغ أو علّق السلة الحالية أولاً قبل استرجاع فاتورة معلقة");
+      }
+      const pending = await getPendingHeldSales();
+      const sale = pending.find((s) => s.localId === localId);
+      if (!sale) {
+        throw new Error("تعذر العثور على الفاتورة المعلقة محلياً");
+      }
+      cart.loadItems(sale.items, sale.discountAmount);
+      await removePendingHeldSale(localId);
     },
     [cart],
   );
@@ -361,6 +401,7 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
     isOnline,
     holdCurrentSale,
     resumeSale,
+    resumePendingHeldSale,
   };
 }
 
