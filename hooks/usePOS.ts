@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { playScanBeep, playSuccessChime } from "@/lib/audio/posSounds";
 import { decrementStock, incrementStock, resolveBarcode } from "@/services/products.service";
@@ -121,36 +121,82 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
     [addProductToCart, isOnline],
   );
 
+  /**
+   * Pending quantity-change batches keyed by barcode. Each tap of the
+   * cart's +/- button applies the visible quantity change immediately (see
+   * updateQuantity below), then coalesces the actual stock-adjustment
+   * network/IndexedDB call into a single request per short burst of taps,
+   * so mashing "+" doesn't fire one Supabase round-trip per click. `baseline`
+   * is the cart quantity from before the burst started; `netBaseDelta` is
+   * the accumulated base-unit delta since that baseline.
+   */
+  const pendingQuantityRef = useRef<
+    Map<
+      string,
+      {
+        timer: ReturnType<typeof setTimeout>;
+        baseline: number;
+        netBaseDelta: number;
+        productId: string;
+        name: string;
+      }
+    >
+  >(new Map());
+
   const updateQuantity = useCallback(
-    async (barcode: string, quantity: number) => {
+    (barcode: string, quantity: number) => {
       const item = findCartItemByBarcode(cart.items, barcode);
       if (!item) return;
-      const delta = quantity - item.quantity;
-      const baseDelta = toBaseUnits(delta, item.unitConversionFactor);
 
-      if (!isOnline) {
-        if (baseDelta !== 0) {
-          const updated = await applyLocalStockDelta(item.productId, -baseDelta);
-          if (baseDelta > 0 && !updated) {
-            setScanError(`الكمية المتوفرة من ${item.name} غير كافية`);
+      // Instant visual feedback on every tap — no debounce on the UI side.
+      cart.updateQuantity(barcode, quantity);
+
+      const pending = pendingQuantityRef.current.get(barcode);
+      const baseline = pending?.baseline ?? item.quantity;
+      const netBaseDelta = toBaseUnits(quantity - baseline, item.unitConversionFactor);
+
+      if (pending) {
+        clearTimeout(pending.timer);
+      }
+
+      const productId = item.productId;
+      const name = item.name;
+
+      const timer = setTimeout(() => {
+        void (async () => {
+          pendingQuantityRef.current.delete(barcode);
+
+          if (netBaseDelta === 0) return;
+
+          if (!isOnline) {
+            const updated = await applyLocalStockDelta(productId, -netBaseDelta);
+            if (netBaseDelta > 0 && !updated) {
+              cart.updateQuantity(barcode, baseline);
+              setScanError(`الكمية المتوفرة من ${name} غير كافية`);
+            }
             return;
           }
-        }
-        cart.updateQuantity(barcode, quantity);
-        return;
-      }
 
-      const supabase = createClient();
-      if (baseDelta < 0) {
-        await incrementStock(supabase, item.productId, -baseDelta);
-      } else if (baseDelta > 0) {
-        const updated = await decrementStock(supabase, item.productId, baseDelta);
-        if (!updated) {
-          setScanError(`الكمية المتوفرة من ${item.name} غير كافية`);
-          return;
-        }
-      }
-      cart.updateQuantity(barcode, quantity);
+          const supabase = createClient();
+          if (netBaseDelta < 0) {
+            await incrementStock(supabase, productId, -netBaseDelta);
+          } else {
+            const updated = await decrementStock(supabase, productId, netBaseDelta);
+            if (!updated) {
+              cart.updateQuantity(barcode, baseline);
+              setScanError(`الكمية المتوفرة من ${name} غير كافية`);
+            }
+          }
+        })();
+      }, 200);
+
+      pendingQuantityRef.current.set(barcode, {
+        timer,
+        baseline,
+        netBaseDelta,
+        productId,
+        name,
+      });
     },
     [cart, isOnline],
   );
@@ -382,27 +428,47 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
     [cart],
   );
 
-  return {
-    items: cart.items,
-    totals: cart.totals,
-    discountAmount: cart.discountAmount,
-    setDiscountAmount: cart.setDiscountAmount,
-    addProductToCart,
-    updateQuantity,
-    removeItem,
-    clear,
-    isScanning,
-    scanError,
-    scanBarcode,
-    checkout,
-    isCheckingOut,
-    lastReceipt,
-    dismissReceipt,
-    isOnline,
-    holdCurrentSale,
-    resumeSale,
-    resumePendingHeldSale,
-  };
+  return useMemo(
+    () => ({
+      items: cart.items,
+      totals: cart.totals,
+      discountAmount: cart.discountAmount,
+      setDiscountAmount: cart.setDiscountAmount,
+      addProductToCart,
+      updateQuantity,
+      removeItem,
+      clear,
+      isScanning,
+      scanError,
+      scanBarcode,
+      checkout,
+      isCheckingOut,
+      lastReceipt,
+      dismissReceipt,
+      isOnline,
+      holdCurrentSale,
+      resumeSale,
+      resumePendingHeldSale,
+    }),
+    [
+      cart,
+      addProductToCart,
+      updateQuantity,
+      removeItem,
+      clear,
+      isScanning,
+      scanError,
+      scanBarcode,
+      checkout,
+      isCheckingOut,
+      lastReceipt,
+      dismissReceipt,
+      isOnline,
+      holdCurrentSale,
+      resumeSale,
+      resumePendingHeldSale,
+    ],
+  );
 }
 
 export type UsePOSReturn = ReturnType<typeof usePOS>;

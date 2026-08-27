@@ -46,15 +46,18 @@ export function useCart() {
 
   const totals = useMemo(() => calculateTotals(items, discountAmount), [items, discountAmount]);
 
-  return {
-    items,
-    totals,
-    discountAmount,
-    setDiscountAmount,
-    addItem,
-    updateQuantity,
-    removeItem,
-    clear,
-    loadItems,
-  };
+  return useMemo(
+    () => ({
+      items,
+      totals,
+      discountAmount,
+      setDiscountAmount,
+      addItem,
+      updateQuantity,
+      removeItem,
+      clear,
+      loadItems,
+    }),
+    [items, totals, discountAmount, setDiscountAmount, addItem, updateQuantity, removeItem, clear, loadItems],
+  );
 }

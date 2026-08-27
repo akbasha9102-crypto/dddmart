@@ -34,11 +34,14 @@ export function BarcodeScanner() {
   // picker modal is open: it only reacts to fast keystroke bursts outside of
   // typing fields, so a stray physical scan while the modal is open is
   // harmless.
-  useBarcodeScanner({
-    onScan: (barcode) => {
+  const handleHidScan = useCallback(
+    (barcode: string) => {
       void scanBarcode(barcode);
     },
-  });
+    [scanBarcode],
+  );
+
+  useBarcodeScanner({ onScan: handleHidScan });
 
   useEffect(() => {
     async function loadData() {
