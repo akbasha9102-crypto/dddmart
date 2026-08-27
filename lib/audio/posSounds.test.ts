@@ -88,3 +88,108 @@ describe("posSounds playback gating when muted", () => {
     expect(oscillator.start).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("posSounds AudioContext resume handling", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function makeFakeAudioContext(state: string) {
+    const oscillator = { type: "", frequency: { value: 0 }, connect: vi.fn(), start: vi.fn(), stop: vi.fn() };
+    const gain = { gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() }, connect: vi.fn() };
+    return {
+      state,
+      currentTime: 0,
+      destination: {},
+      createOscillator: vi.fn(() => oscillator),
+      createGain: vi.fn(() => gain),
+      resume: vi.fn(),
+    };
+  }
+
+  it("resumes the AudioContext when playScanBeep runs and the context is suspended", async () => {
+    const ctxInstance = makeFakeAudioContext("suspended");
+    const AudioContextCtor = vi.fn(() => ctxInstance);
+    vi.stubGlobal("window", { localStorage: makeFakeLocalStorage(), AudioContext: AudioContextCtor });
+    const { playScanBeep } = await import("./posSounds");
+    playScanBeep();
+    expect(ctxInstance.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call resume when the context is already running", async () => {
+    const ctxInstance = makeFakeAudioContext("running");
+    const AudioContextCtor = vi.fn(() => ctxInstance);
+    vi.stubGlobal("window", { localStorage: makeFakeLocalStorage(), AudioContext: AudioContextCtor });
+    const { playScanBeep } = await import("./posSounds");
+    playScanBeep();
+    expect(ctxInstance.resume).not.toHaveBeenCalled();
+  });
+
+  it("resumes an existing suspended context on visibilitychange when the page becomes visible", async () => {
+    const ctxInstance = makeFakeAudioContext("suspended");
+    const AudioContextCtor = vi.fn(() => ctxInstance);
+    const listeners: Record<string, () => void> = {};
+    const fakeDocument = {
+      visibilityState: "visible",
+      addEventListener: vi.fn((event: string, handler: () => void) => {
+        listeners[event] = handler;
+      }),
+    };
+    vi.stubGlobal("window", {
+      localStorage: makeFakeLocalStorage(),
+      AudioContext: AudioContextCtor,
+      document: fakeDocument,
+    });
+    const { playScanBeep } = await import("./posSounds");
+    playScanBeep(); // creates the context and triggers the initial resume() call
+    ctxInstance.resume.mockClear();
+
+    expect(fakeDocument.addEventListener).toHaveBeenCalledWith("visibilitychange", expect.any(Function));
+    listeners["visibilitychange"]?.();
+
+    expect(ctxInstance.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it("playScanBeep does not throw when createOscillator throws", async () => {
+    const AudioContextCtor = vi.fn(() => ({
+      state: "running",
+      currentTime: 0,
+      destination: {},
+      createOscillator: vi.fn(() => {
+        throw new Error("boom");
+      }),
+      createGain: vi.fn(() => ({ gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() }, connect: vi.fn() })),
+      resume: vi.fn(),
+    }));
+    vi.stubGlobal("window", { localStorage: makeFakeLocalStorage(), AudioContext: AudioContextCtor });
+    const { playScanBeep } = await import("./posSounds");
+    expect(() => playScanBeep()).not.toThrow();
+  });
+
+  it("playSuccessChime does not throw when oscillator.start throws", async () => {
+    const oscillator = {
+      type: "",
+      frequency: { value: 0 },
+      connect: vi.fn(),
+      start: vi.fn(() => {
+        throw new Error("boom");
+      }),
+      stop: vi.fn(),
+    };
+    const gain = { gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() }, connect: vi.fn() };
+    const AudioContextCtor = vi.fn(() => ({
+      state: "running",
+      currentTime: 0,
+      destination: {},
+      createOscillator: vi.fn(() => oscillator),
+      createGain: vi.fn(() => gain),
+      resume: vi.fn(),
+    }));
+    vi.stubGlobal("window", { localStorage: makeFakeLocalStorage(), AudioContext: AudioContextCtor });
+    const { playSuccessChime } = await import("./posSounds");
+    expect(() => playSuccessChime()).not.toThrow();
+  });
+});
