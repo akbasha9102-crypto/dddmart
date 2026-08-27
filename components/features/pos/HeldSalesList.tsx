@@ -56,6 +56,7 @@ export function HeldSalesList({ onResumed, activeCartHasItems, onCountChange }: 
     setBusyId(id);
     try {
       await resumeSale(id);
+      setHeldSales((prev) => (prev ?? []).filter((r) => r.id !== id));
       onResumed();
     } finally {
       setBusyId(null);
