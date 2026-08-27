@@ -1,15 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PackagePlus, PackageX, ClipboardCheck, Pencil, Trash2 } from "lucide-react";
+import { PackagePlus, PackageX, ClipboardCheck, Pencil, Trash2, LayoutGrid } from "lucide-react";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { isLowStock } from "@/types/product";
 import { cn } from "@/lib/utils";
-import { groupProductsByCategory } from "@/lib/categoryGroups";
+import { ALL_CATEGORY_ID, ALL_CATEGORY_LABEL, groupProductsByCategory, resolveVisibleProducts } from "@/lib/categoryGroups";
 import { getCategoryIcon } from "@/lib/categoryIcons";
 import { useAuth } from "@/context/AuthContext";
 import { isAdminRole } from "@/lib/employees/adminCheck";
 import { ConfirmInline } from "@/components/ui/ConfirmInline";
+import { Input } from "@/components/ui/Input";
 
 interface CategoryProductListProps {
   products: ProductWithCategory[];
@@ -33,8 +34,10 @@ export function CategoryProductList({
 }: CategoryProductListProps) {
   const groups = useMemo(() => groupProductsByCategory(products, categories), [products, categories]);
 
-  const [activeId, setActiveId] = useState<string | null>(groups[0]?.id ?? null);
-  const activeGroup = groups.find((group) => group.id === activeId) ?? groups[0] ?? null;
+  const [activeId, setActiveId] = useState<string>(ALL_CATEGORY_ID);
+  const [search, setSearch] = useState("");
+  const visibleProducts = resolveVisibleProducts({ products, groups, activeId, search });
+  const isSearching = search.trim().length > 0;
 
   if (groups.length === 0) {
     return <p className="p-4 text-center text-gray-400">لا توجد منتجات بعد — أضف أول منتج</p>;
@@ -42,9 +45,32 @@ export function CategoryProductList({
 
   return (
     <div className="flex flex-col gap-2">
+      <Input
+        type="text"
+        placeholder="ابحث باسم المنتج"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        <button
+          type="button"
+          onClick={() => setActiveId(ALL_CATEGORY_ID)}
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+            activeId === ALL_CATEGORY_ID
+              ? "border-brand-600 bg-brand-600 text-white"
+              : "border-brand-200 bg-white text-gray-600 hover:bg-brand-50",
+          )}
+        >
+          <LayoutGrid className="h-4 w-4" />
+          <span>{ALL_CATEGORY_LABEL}</span>
+          <span className={cn("text-xs", activeId === ALL_CATEGORY_ID ? "text-white/80" : "text-gray-400")}>
+            {products.length}
+          </span>
+        </button>
         {groups.map((group) => {
-          const isActive = activeGroup?.id === group.id;
+          const isActive = activeId === group.id;
           const Icon = getCategoryIcon(group.icon);
           return (
             <button
@@ -53,13 +79,10 @@ export function CategoryProductList({
               onClick={() => setActiveId(group.id)}
               className={cn(
                 "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
-                isActive ? "text-white" : "bg-white text-gray-600",
-              )}
-              style={
                 isActive
-                  ? { backgroundColor: group.color, borderColor: group.color }
-                  : { borderColor: group.color }
-              }
+                  ? "border-brand-600 bg-brand-600 text-white"
+                  : "border-brand-200 bg-white text-gray-600 hover:bg-brand-50",
+              )}
             >
               <Icon className="h-4 w-4" />
               <span>{group.label}</span>
@@ -72,10 +95,12 @@ export function CategoryProductList({
       </div>
 
       <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2.5">
-        {activeGroup && activeGroup.products.length === 0 ? (
-          <p className="p-4 text-center text-gray-400">لا توجد منتجات بهذا القسم</p>
+        {visibleProducts.length === 0 ? (
+          <p className="p-4 text-center text-gray-400">
+            {isSearching ? "لا توجد نتائج بحث" : "لا توجد منتجات بهذا القسم"}
+          </p>
         ) : (
-          activeGroup?.products.map((product) => (
+          visibleProducts.map((product) => (
             <ProductRow
               key={product.id}
               product={product}

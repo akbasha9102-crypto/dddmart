@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { LayoutGrid } from "lucide-react";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { groupProductsByCategory } from "@/lib/categoryGroups";
+import { Input } from "@/components/ui/Input";
+import { ALL_CATEGORY_ID, ALL_CATEGORY_LABEL, groupProductsByCategory, resolveVisibleProducts } from "@/lib/categoryGroups";
 import { getCategoryIcon } from "@/lib/categoryIcons";
 
 interface ManualProductPickerProps {
@@ -27,15 +29,18 @@ export function ManualProductPicker({ products, categories, open, onAdd, onClose
     [products, categories],
   );
 
-  const [activeId, setActiveId] = useState<string | null>(groups[0]?.id ?? null);
-  const activeGroup = groups.find((group) => group.id === activeId) ?? groups[0] ?? null;
+  const [activeId, setActiveId] = useState<string>(ALL_CATEGORY_ID);
+  const [search, setSearch] = useState("");
+  const visibleProducts = resolveVisibleProducts({ products, groups, activeId, search });
+  const isSearching = search.trim().length > 0;
 
   const [selectedProduct, setSelectedProduct] = useState<ProductWithCategory | null>(null);
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     if (!open) return;
-    setActiveId(groups[0]?.id ?? null);
+    setActiveId(ALL_CATEGORY_ID);
+    setSearch("");
     setSelectedProduct(null);
     setQuantity(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -69,9 +74,32 @@ export function ManualProductPicker({ products, categories, open, onAdd, onClose
 
   return (
     <div className="flex max-h-64 flex-col gap-3">
+      <Input
+        type="text"
+        placeholder="ابحث باسم المنتج"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        <button
+          type="button"
+          onClick={() => setActiveId(ALL_CATEGORY_ID)}
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+            activeId === ALL_CATEGORY_ID
+              ? "border-brand-600 bg-brand-600 text-white"
+              : "border-brand-200 bg-white text-gray-600 hover:bg-brand-50",
+          )}
+        >
+          <LayoutGrid className="h-4 w-4" />
+          <span>{ALL_CATEGORY_LABEL}</span>
+          <span className={cn("text-xs", activeId === ALL_CATEGORY_ID ? "text-white/80" : "text-gray-400")}>
+            {products.length}
+          </span>
+        </button>
         {groups.map((group) => {
-          const isActive = activeGroup?.id === group.id;
+          const isActive = activeId === group.id;
           const Icon = getCategoryIcon(group.icon);
           return (
             <button
@@ -80,13 +108,10 @@ export function ManualProductPicker({ products, categories, open, onAdd, onClose
               onClick={() => setActiveId(group.id)}
               className={cn(
                 "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors",
-                isActive ? "text-white" : "bg-white text-gray-600",
-              )}
-              style={
                 isActive
-                  ? { backgroundColor: group.color, borderColor: group.color }
-                  : { borderColor: group.color }
-              }
+                  ? "border-brand-600 bg-brand-600 text-white"
+                  : "border-brand-200 bg-white text-gray-600 hover:bg-brand-50",
+              )}
             >
               <Icon className="h-4 w-4" />
               <span>{group.label}</span>
@@ -99,31 +124,37 @@ export function ManualProductPicker({ products, categories, open, onAdd, onClose
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-xl border border-gray-200 bg-white p-3">
-        {activeGroup?.products.map((product) => (
-          <button
-            key={product.id}
-            type="button"
-            disabled={product.quantity <= 0}
-            onClick={() => selectProduct(product)}
-            className={cn(
-              "flex items-center justify-between rounded-lg px-3 py-2 text-right transition-colors",
-              product.quantity <= 0
-                ? "cursor-not-allowed bg-gray-50 opacity-60"
-                : selectedProduct?.id === product.id
-                  ? "bg-brand-50 ring-2 ring-brand-500"
-                  : "bg-gray-50 hover:bg-gray-100",
-            )}
-          >
-            <span className="flex-1 truncate font-medium text-gray-900">{product.name}</span>
-            {product.quantity <= 0 ? (
-              <span className="shrink-0 text-sm font-semibold text-red-600">غير متوفر</span>
-            ) : (
-              <span className="shrink-0 text-sm text-gray-500">
-                {formatCurrency(product.sale_price)} · متوفر {product.quantity}
-              </span>
-            )}
-          </button>
-        ))}
+        {visibleProducts.length === 0 ? (
+          <p className="p-4 text-center text-gray-400">
+            {isSearching ? "لا توجد نتائج بحث" : "لا توجد منتجات بعد"}
+          </p>
+        ) : (
+          visibleProducts.map((product) => (
+            <button
+              key={product.id}
+              type="button"
+              disabled={product.quantity <= 0}
+              onClick={() => selectProduct(product)}
+              className={cn(
+                "flex items-center justify-between rounded-lg px-3 py-2 text-right transition-colors",
+                product.quantity <= 0
+                  ? "cursor-not-allowed bg-gray-50 opacity-60"
+                  : selectedProduct?.id === product.id
+                    ? "bg-brand-50 ring-2 ring-brand-500"
+                    : "bg-gray-50 hover:bg-gray-100",
+              )}
+            >
+              <span className="flex-1 truncate font-medium text-gray-900">{product.name}</span>
+              {product.quantity <= 0 ? (
+                <span className="shrink-0 text-sm font-semibold text-red-600">غير متوفر</span>
+              ) : (
+                <span className="shrink-0 text-sm text-gray-500">
+                  {formatCurrency(product.sale_price)} · متوفر {product.quantity}
+                </span>
+              )}
+            </button>
+          ))
+        )}
       </div>
 
       {selectedProduct ? (
