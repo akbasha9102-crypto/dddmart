@@ -20,7 +20,7 @@ export function ReceiptPrinter({ receipt, onClose }: ReceiptPrinterProps) {
     <div className="flex flex-col items-center gap-4">
       <div id="receipt" className="w-[80mm] max-w-full bg-white p-3 font-mono text-xs text-black">
         <div className="text-center">
-          <p className="text-base font-bold">{store?.name ?? "DDD Mart"}</p>
+          <p className="text-base font-bold">{store?.name ?? ""}</p>
           {store?.phone ? <p>{store.phone}</p> : null}
           {store?.address ? <p>{store.address}</p> : null}
           <p>{isCredit ? "فاتورة بيع بالآجل" : "فاتورة بيع نقدي"}</p>
