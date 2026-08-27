@@ -12,28 +12,28 @@ import { setCachedCategories, setCachedProducts } from "@/lib/offline/db";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { CameraBarcodeScanner } from "@/components/features/shared/CameraBarcodeScanner";
 import { ManualProductPicker } from "@/components/features/pos/ManualProductPicker";
+import { Modal } from "@/components/ui/Modal";
 import { cn } from "@/lib/utils";
-
-type Mode = "scan" | "manual";
 
 /**
  * Barcode entry: a physical HID scanner fires keystrokes globally (captured
  * by useBarcodeScanner) regardless of which UI mode is shown below. Visibly,
  * the cashier has two explicit entry methods: an optical camera scan
  * (one-shot action, opens a modal) or a manual category → product →
- * quantity picker (persistent mode) for items without a readable barcode.
+ * quantity picker (modal) for items without a readable barcode.
  */
 export function BarcodeScanner() {
   const { scanBarcode, scanError, addProductToCart } = usePOSContext();
   const { isOnline } = useOfflineContext();
-  const [mode, setMode] = useState<Mode>("scan");
+  const [isManualOpen, setIsManualOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
 
-  // The HID scanner listener stays enabled regardless of mode: it only
-  // reacts to fast keystroke bursts outside of typing fields, so a stray
-  // physical scan while in manual mode is harmless.
+  // The HID scanner listener stays enabled regardless of whether the manual
+  // picker modal is open: it only reacts to fast keystroke bursts outside of
+  // typing fields, so a stray physical scan while the modal is open is
+  // harmless.
   useBarcodeScanner({
     onScan: (barcode) => {
       void scanBarcode(barcode);
@@ -87,10 +87,10 @@ export function BarcodeScanner() {
         </button>
         <button
           type="button"
-          onClick={() => setMode("manual")}
+          onClick={() => setIsManualOpen(true)}
           className={cn(
             "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
-            mode === "manual"
+            isManualOpen
               ? "border-brand-600 bg-brand-600 text-white"
               : "border-gray-200 bg-white text-gray-600",
           )}
@@ -103,9 +103,15 @@ export function BarcodeScanner() {
         <div className="rounded-lg bg-red-100 px-3 py-1 text-sm text-red-700">{scanError}</div>
       ) : null}
 
-      {mode === "manual" ? (
-        <ManualProductPicker products={products} categories={categories} onAdd={handleManualAdd} />
-      ) : null}
+      <Modal open={isManualOpen} onClose={() => setIsManualOpen(false)} title="إضافة يدوية">
+        <ManualProductPicker
+          products={products}
+          categories={categories}
+          open={isManualOpen}
+          onAdd={handleManualAdd}
+          onClose={() => setIsManualOpen(false)}
+        />
+      </Modal>
 
       <CameraBarcodeScanner open={isCameraOpen} onClose={() => setIsCameraOpen(false)} onDetected={handleDetected} />
     </div>

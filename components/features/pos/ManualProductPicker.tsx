@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils";
@@ -11,7 +11,9 @@ import { getCategoryIcon } from "@/lib/categoryIcons";
 interface ManualProductPickerProps {
   products: ProductWithCategory[];
   categories: Category[];
+  open: boolean;
   onAdd: (product: ProductWithCategory, quantity: number) => void;
+  onClose: () => void;
 }
 
 /**
@@ -19,7 +21,7 @@ interface ManualProductPickerProps {
  * quantity. Visually mirrors CategoryProductList's pill-tab pattern, but
  * rows are selectable (with a quantity stepper) instead of read-only.
  */
-export function ManualProductPicker({ products, categories, onAdd }: ManualProductPickerProps) {
+export function ManualProductPicker({ products, categories, open, onAdd, onClose }: ManualProductPickerProps) {
   const groups = useMemo(
     () => groupProductsByCategory(products, categories).filter((group) => group.products.length > 0),
     [products, categories],
@@ -30,6 +32,14 @@ export function ManualProductPicker({ products, categories, onAdd }: ManualProdu
 
   const [selectedProduct, setSelectedProduct] = useState<ProductWithCategory | null>(null);
   const [quantity, setQuantity] = useState(1);
+
+  useEffect(() => {
+    if (!open) return;
+    setActiveId(groups[0]?.id ?? null);
+    setSelectedProduct(null);
+    setQuantity(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   function selectProduct(product: ProductWithCategory) {
     if (product.quantity <= 0) return;
@@ -45,7 +55,16 @@ export function ManualProductPicker({ products, categories, onAdd }: ManualProdu
   }
 
   if (products.length === 0) {
-    return <p className="p-6 text-center text-gray-400">لا توجد منتجات بعد</p>;
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="p-6 text-center text-gray-400">لا توجد منتجات بعد</p>
+        <div className="flex justify-end">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            ✅ إغلاق
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -134,6 +153,12 @@ export function ManualProductPicker({ products, categories, onAdd }: ManualProdu
           </Button>
         </div>
       ) : null}
+
+      <div className="flex justify-end">
+        <Button type="button" variant="secondary" onClick={onClose}>
+          ✅ إغلاق
+        </Button>
+      </div>
     </div>
   );
 }
