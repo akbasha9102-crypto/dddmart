@@ -36,7 +36,7 @@ export function CategoryProductList({
   const [activeId, setActiveId] = useState<string | null>(groups[0]?.id ?? null);
   const activeGroup = groups.find((group) => group.id === activeId) ?? groups[0] ?? null;
 
-  if (products.length === 0) {
+  if (groups.length === 0) {
     return <p className="p-4 text-center text-gray-400">لا توجد منتجات بعد — أضف أول منتج</p>;
   }
 

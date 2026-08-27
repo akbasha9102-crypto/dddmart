@@ -24,7 +24,7 @@ export async function listCategories(supabase: Client, options?: { includeInacti
  * defaults (10-180) but before "أخرى" (999) — no extra query round-trip
  * needed to compute it.
  *
- * Duplicate names (unique(name) constraint, migration 00000000000001) are
+ * Duplicate names (unique(store_id, name) constraint, migration 00000000000020) are
  * treated as idempotent: re-fetch and return the existing row instead of
  * surfacing an error to the UI. The idempotent-duplicate path intentionally
  * skips logOperation so re-submitting an existing name doesn't double-log.
@@ -55,6 +55,7 @@ export async function createCategory(
         .from("categories")
         .select("*")
         .eq("name", trimmedName)
+        .eq("store_id", storeId)
         .single();
       if (fetchError) throw fetchError;
       return existing;
