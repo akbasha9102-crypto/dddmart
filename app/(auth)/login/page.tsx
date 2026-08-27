@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { BrandName } from "@/components/shared/BrandName";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,7 +43,9 @@ export default function LoginPage() {
         onSubmit={handleSubmit}
         className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
       >
-        <h1 className="mb-1 text-center text-2xl font-bold text-brand-700">DDD Mart</h1>
+        <h1 className="mb-1 text-center text-2xl font-bold text-brand-700">
+          <BrandName />
+        </h1>
         <p className="mb-6 text-center text-sm text-gray-500">تسجيل دخول الموظفين</p>
 
         <div className="flex flex-col gap-4">
