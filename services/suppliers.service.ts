@@ -257,31 +257,30 @@ export interface LinkSupplierProductInput {
   costPrice?: number | null;
 }
 
-/** Links a product to a supplier, or updates the cost_price if the pair is already linked (upsert on the (supplier_id, product_id) unique constraint). Not audit-logged — routine configuration, not a financial event. */
-export async function linkSupplierProduct(
+/** Links a batch of products to a supplier in one round trip, or updates cost_price for any pair already linked (upsert on the (supplier_id, product_id) unique constraint). Not audit-logged — routine configuration, not a financial event. */
+export async function linkSupplierProducts(
   supabase: Client,
-  input: LinkSupplierProductInput,
+  inputs: LinkSupplierProductInput[],
   storeId: string,
-): Promise<SupplierProduct> {
+): Promise<SupplierProduct[]> {
   const { data, error } = await supabase
     .from("supplier_products")
     .upsert(
-      {
+      inputs.map((input) => ({
         supplier_id: input.supplierId,
         product_id: input.productId,
         cost_price: input.costPrice ?? null,
         store_id: storeId,
-      },
+      })),
       { onConflict: "supplier_id,product_id" },
     )
-    .select()
-    .single();
+    .select();
 
   if (error) throw error;
   return data;
 }
 
-/** Removes a supplier↔product link. Not audit-logged, same reasoning as linkSupplierProduct. */
+/** Removes a supplier↔product link. Not audit-logged, same reasoning as linkSupplierProducts. */
 export async function unlinkSupplierProduct(supabase: Client, supplierId: string, productId: string): Promise<void> {
   const { error } = await supabase.from("supplier_products").delete().eq("supplier_id", supplierId).eq("product_id", productId);
 

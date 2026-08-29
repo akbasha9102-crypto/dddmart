@@ -5,7 +5,7 @@ import {
   createSupplier,
   recordSupplierPurchase,
   recordSupplierPayment,
-  linkSupplierProduct,
+  linkSupplierProducts,
   unlinkSupplierProduct,
   getSupplierProducts,
 } from "./suppliers.service";
@@ -233,20 +233,28 @@ describe("recordSupplierPayment", () => {
   });
 });
 
-describe("linkSupplierProduct", () => {
-  it("upserts on (supplier_id, product_id) so re-linking updates cost instead of erroring", async () => {
-    const upsertedRow: SupplierProduct = {
-      id: "link-1",
-      supplier_id: "supplier-1",
-      product_id: "product-1",
-      cost_price: 1500,
-      store_id: "store-1",
-      created_at: "",
-    };
+describe("linkSupplierProducts", () => {
+  it("upserts the whole batch in one call on (supplier_id, product_id) so re-linking updates cost instead of erroring", async () => {
+    const upsertedRows: SupplierProduct[] = [
+      {
+        id: "link-1",
+        supplier_id: "supplier-1",
+        product_id: "product-1",
+        cost_price: 1500,
+        store_id: "store-1",
+        created_at: "",
+      },
+      {
+        id: "link-2",
+        supplier_id: "supplier-1",
+        product_id: "product-2",
+        cost_price: 2000,
+        store_id: "store-1",
+        created_at: "",
+      },
+    ];
     const upsertSpy = vi.fn(() => ({
-      select: () => ({
-        single: async () => ({ data: upsertedRow, error: null }),
-      }),
+      select: async () => ({ data: upsertedRows, error: null }),
     }));
     const supabase = {
       from: (table: string) => {
@@ -255,13 +263,23 @@ describe("linkSupplierProduct", () => {
       },
     } as unknown as SupabaseClient<Database>;
 
-    const result = await linkSupplierProduct(supabase, { supplierId: "supplier-1", productId: "product-1", costPrice: 1500 }, "store-1");
+    const result = await linkSupplierProducts(
+      supabase,
+      [
+        { supplierId: "supplier-1", productId: "product-1", costPrice: 1500 },
+        { supplierId: "supplier-1", productId: "product-2", costPrice: 2000 },
+      ],
+      "store-1",
+    );
 
     expect(upsertSpy).toHaveBeenCalledWith(
-      { supplier_id: "supplier-1", product_id: "product-1", cost_price: 1500, store_id: "store-1" },
+      [
+        { supplier_id: "supplier-1", product_id: "product-1", cost_price: 1500, store_id: "store-1" },
+        { supplier_id: "supplier-1", product_id: "product-2", cost_price: 2000, store_id: "store-1" },
+      ],
       { onConflict: "supplier_id,product_id" },
     );
-    expect(result).toEqual(upsertedRow);
+    expect(result).toEqual(upsertedRows);
   });
 });
 
