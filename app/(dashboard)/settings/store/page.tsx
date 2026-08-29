@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { ArrowRight } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useStoreProfile } from "@/hooks/useStoreProfile";
 import { updateStore } from "@/services/stores.service";
@@ -24,6 +25,7 @@ export default function StoreSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [passwordToastMessage, setPasswordToastMessage] = useState<string | null>(null);
+  const [view, setView] = useState<"info" | "password">("info");
 
   useEffect(() => {
     if (store) {
@@ -66,31 +68,57 @@ export default function StoreSettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <BackToSettingsLink />
-        <h1 className="text-xl font-bold text-gray-900">بيانات المتجر</h1>
-      </div>
+      {view === "info" ? (
+        <>
+          <div>
+            <BackToSettingsLink />
+            <h1 className="text-xl font-bold text-gray-900">بيانات المتجر</h1>
+          </div>
 
-      {isLoading ? (
-        <p className="p-6 text-center text-gray-400">جارٍ التحميل...</p>
+          {isLoading ? (
+            <p className="p-6 text-center text-gray-400">جارٍ التحميل...</p>
+          ) : (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <Input label="اسم المحل" value={name} onChange={(event) => setName(event.target.value)} required />
+              <Input label="الهاتف" value={phone} onChange={(event) => setPhone(event.target.value)} />
+              <Input label="العنوان" value={address} onChange={(event) => setAddress(event.target.value)} />
+
+              {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+              <Button type="submit" disabled={isSubmitting} className="w-full">
+                {isSubmitting ? "جارٍ الحفظ..." : "حفظ"}
+              </Button>
+            </form>
+          )}
+
+          <div className="border-t border-gray-200 pt-6">
+            <Button type="button" variant="secondary" className="w-full" onClick={() => setView("password")}>
+              تغيير كلمة السر
+            </Button>
+          </div>
+        </>
       ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Input label="اسم المحل" value={name} onChange={(event) => setName(event.target.value)} required />
-          <Input label="الهاتف" value={phone} onChange={(event) => setPhone(event.target.value)} />
-          <Input label="العنوان" value={address} onChange={(event) => setAddress(event.target.value)} />
+        <>
+          <div>
+            <button
+              type="button"
+              onClick={() => setView("info")}
+              className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-700"
+            >
+              <ArrowRight className="h-4 w-4" />
+              بيانات المتجر
+            </button>
+            <h1 className="text-xl font-bold text-gray-900">تغيير كلمة السر</h1>
+          </div>
 
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
-
-          <Button type="submit" disabled={isSubmitting} className="w-full">
-            {isSubmitting ? "جارٍ الحفظ..." : "حفظ"}
-          </Button>
-        </form>
+          <ChangePasswordForm
+            onSuccess={() => {
+              setPasswordToastMessage("تم تغيير كلمة المرور");
+              setView("info");
+            }}
+          />
+        </>
       )}
-
-      <div className="flex flex-col gap-4 border-t border-gray-200 pt-6">
-        <h2 className="text-lg font-semibold text-gray-900">تغيير كلمة السر</h2>
-        <ChangePasswordForm onSuccess={() => setPasswordToastMessage("تم تغيير كلمة المرور")} />
-      </div>
 
       {toastMessage ? <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} /> : null}
       {passwordToastMessage ? (
