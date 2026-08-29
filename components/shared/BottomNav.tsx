@@ -26,14 +26,7 @@ export function BottomNav() {
               isActive && "font-bold text-brand-700",
             )}
           >
-            <span
-              className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-full",
-                isActive && "bg-brand-600",
-              )}
-            >
-              <Icon className={cn("h-5 w-5", isActive && "text-white")} />
-            </span>
+            <Icon className="h-5 w-5" />
             {link.label}
           </Link>
         );
