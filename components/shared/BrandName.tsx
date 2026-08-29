@@ -9,11 +9,16 @@ interface BrandNameProps {
  * glyph (handle, basket, two wheels) in place of the old "MART" text. Uses
  * `currentColor` so it inherits the caller's text color. Accepts className
  * so callers keep their own heading/link typography and color.
+ *
+ * The wordmark forces `dir="ltr"`: every caller renders inside the app's
+ * RTL document (`app/layout.tsx`), and without an explicit direction the
+ * browser's bidi algorithm reverses the flex order, pushing the cart icon
+ * to the wrong side of the word instead of gluing it to the "I".
  */
 export function BrandName({ className }: BrandNameProps) {
   return (
-    <span className={cn(className)}>
-      <span aria-hidden="true" className="inline-flex items-baseline gap-1.5">
+    <span className={cn("font-extrabold tracking-wider", className)}>
+      <span dir="ltr" aria-hidden="true" className="inline-flex items-baseline gap-1">
         MASHI
         <svg
           className="inline-block h-[0.85em] w-[0.85em] translate-y-[0.15em]"
