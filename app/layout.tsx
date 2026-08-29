@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MASHI MART | نظام إدارة المحلات",
+  title: "ماشي مارت | نظام إدارة المحلات",
   description: "نظام إدارة محلات وماركتات سحابي متكامل ومبسط",
 };
 
