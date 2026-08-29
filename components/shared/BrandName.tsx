@@ -18,7 +18,7 @@ interface BrandNameProps {
 export function BrandName({ className }: BrandNameProps) {
   return (
     <span className={cn("font-extrabold tracking-wider", className)}>
-      <span dir="ltr" aria-hidden="true" className="inline-flex items-baseline gap-1">
+      <span dir="ltr" aria-hidden="true" className="inline-flex items-baseline">
         MASHI
         <svg
           className="inline-block h-[0.85em] w-[0.85em] translate-y-[0.15em]"

@@ -23,10 +23,17 @@ export function BottomNav() {
             href={link.href}
             className={cn(
               "flex flex-1 flex-col items-center justify-center gap-1 text-sm font-medium text-gray-500",
-              isActive && "text-brand-700",
+              isActive && "font-bold text-brand-700",
             )}
           >
-            <Icon className="h-5 w-5" />
+            <span
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-full",
+                isActive && "bg-brand-600",
+              )}
+            >
+              <Icon className={cn("h-5 w-5", isActive && "text-white")} />
+            </span>
             {link.label}
           </Link>
         );
