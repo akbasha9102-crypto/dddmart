@@ -10,6 +10,7 @@ import { ConfirmInline } from "@/components/ui/ConfirmInline";
 interface EmployeeListProps {
   employees: Employee[];
   currentUserId: string | null;
+  onSelect: (employee: Employee) => void;
   onEdit: (employee: Employee) => void;
   onResetPassword: (employee: Employee) => void;
   onDelete: (employee: Employee) => void;
@@ -21,6 +22,7 @@ interface EmployeeListProps {
 export function EmployeeList({
   employees,
   currentUserId,
+  onSelect,
   onEdit,
   onResetPassword,
   onDelete,
@@ -56,7 +58,13 @@ export function EmployeeList({
           return (
             <div
               key={employee.id}
-              className={cn("flex items-center justify-between gap-3 p-4", !employee.is_active && "opacity-60")}
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelect(employee)}
+              className={cn(
+                "flex cursor-pointer items-center justify-between gap-3 p-4 hover:bg-gray-50",
+                !employee.is_active && "opacity-60",
+              )}
             >
               <div className="flex flex-col gap-1">
                 <p className="font-medium text-gray-900">

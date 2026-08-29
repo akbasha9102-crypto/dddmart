@@ -47,6 +47,7 @@ export interface ArchiveFilter {
   endDate?: Date;
   actionType?: OperationActionType;
   entityType?: OperationEntityType;
+  userId?: string;
 }
 
 export async function listOperations(supabase: Client, filter?: ArchiveFilter): Promise<OperationLogWithActor[]> {
@@ -56,6 +57,7 @@ export async function listOperations(supabase: Client, filter?: ArchiveFilter): 
   if (filter?.endDate) query = query.lte("created_at", filter.endDate.toISOString());
   if (filter?.actionType) query = query.eq("action_type", filter.actionType);
   if (filter?.entityType) query = query.eq("entity_type", filter.entityType);
+  if (filter?.userId) query = query.eq("user_id", filter.userId);
 
   const { data, error } = await query;
 

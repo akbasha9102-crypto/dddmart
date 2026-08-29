@@ -21,3 +21,15 @@ export async function listEmployees(supabase: Client): Promise<Employee[]> {
   if (error) throw error;
   return data ?? [];
 }
+
+/** Fetches a single employee's profile for the /employees/[id] detail screen. Returns null if the id doesn't resolve to a profile row (e.g. bad/stale link) rather than throwing — this is an expected, handleable case at the call site. */
+export async function getEmployee(supabase: Client, id: string): Promise<Employee | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, role, is_active, created_at")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}

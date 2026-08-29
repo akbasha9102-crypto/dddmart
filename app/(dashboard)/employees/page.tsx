@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useEmployees } from "@/hooks/useEmployees";
 import type { Employee } from "@/services/employees.service";
@@ -16,6 +17,7 @@ import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
 export default function EmployeesPage() {
   const { user, role } = useAuth();
   const isAdmin = role === "admin";
+  const router = useRouter();
 
   const employees = useEmployees();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -80,6 +82,10 @@ export default function EmployeesPage() {
     }
   }
 
+  function handleSelect(employee: Employee) {
+    router.push(`/employees/${employee.id}`);
+  }
+
   function handleEdit(employee: Employee) {
     setEditingEmployee(employee);
   }
@@ -110,6 +116,7 @@ export default function EmployeesPage() {
         <EmployeeList
           employees={employees.data}
           currentUserId={user?.id ?? null}
+          onSelect={handleSelect}
           onEdit={handleEdit}
           onResetPassword={handleResetPassword}
           onDelete={handleDelete}
