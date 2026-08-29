@@ -129,7 +129,7 @@ export function RankingList({ title, items, onCategoryClick }: RankingListProps)
                   key={key}
                   type="button"
                   onClick={() => onCategoryClick?.(item.categoryId, item.categoryName)}
-                  className="flex items-center gap-3 py-3 text-right"
+                  className="flex items-center gap-3 py-3 text-right hover:bg-gray-50"
                 >
                   {content}
                   {details}

@@ -9,6 +9,19 @@ import { InvoiceView } from "./InvoiceView";
 import { DailyComparisonCards } from "./DailyComparisonCards";
 import { HourlyBreakdownChart } from "./HourlyBreakdownChart";
 import type { Sale } from "@/types/pos";
+import {
+  Banknote,
+  TrendingUp,
+  Receipt,
+  Percent,
+  Undo2,
+  PackageX,
+  Scale,
+  Calculator,
+  Package,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 
 interface DailyReportProps {
   report: DailyReportDetails;
@@ -19,54 +32,90 @@ export function DailyReport({ report }: DailyReportProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-3">
         <Card>
-          <p className="text-sm text-gray-500">عدد الفواتير</p>
-          <p className="mt-1 text-2xl font-bold text-gray-900">{report.salesCount}</p>
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600">
+            <Receipt className="h-4 w-4" />
+          </span>
+          <p className="mt-2 text-sm text-gray-500">عدد الفواتير</p>
+          <p className="mt-1 text-3xl font-bold text-gray-900">{report.salesCount}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-500">إجمالي المبيعات</p>
-          <p className="mt-1 text-2xl font-bold text-brand-700">{formatCurrency(report.totalRevenue)}</p>
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+            <Banknote className="h-4 w-4" />
+          </span>
+          <p className="mt-2 text-sm text-gray-500">إجمالي المبيعات</p>
+          <p className="mt-1 text-3xl font-bold text-brand-700">{formatCurrency(report.totalRevenue)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-500">صافي الربح</p>
-          <p className="mt-1 text-2xl font-bold text-green-700">{formatCurrency(report.totalProfit)}</p>
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-50 text-green-700">
+            <TrendingUp className="h-4 w-4" />
+          </span>
+          <p className="mt-2 text-sm text-gray-500">صافي الربح</p>
+          <p className="mt-1 text-3xl font-bold text-green-700">{formatCurrency(report.totalProfit)}</p>
           <p className="mt-0.5 text-[11px] text-gray-400">تقديري</p>
         </Card>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card>
-          <p className="text-sm text-gray-500">متوسط الفاتورة</p>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+            <Calculator className="h-3.5 w-3.5" />
+          </span>
+          <p className="mt-2 text-sm text-gray-500">متوسط الفاتورة</p>
           <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(report.averageInvoiceValue)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-500">إجمالي القطع المباعة</p>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+            <Package className="h-3.5 w-3.5" />
+          </span>
+          <p className="mt-2 text-sm text-gray-500">إجمالي القطع المباعة</p>
           <p className="mt-1 text-xl font-bold text-gray-900">{report.totalItemsSold}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-500">إجمالي الخصومات</p>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+            <Percent className="h-3.5 w-3.5" />
+          </span>
+          <p className="mt-2 text-sm text-gray-500">إجمالي الخصومات</p>
           <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(report.totalDiscountGiven)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-500">إجمالي المرتجعات</p>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+            <Undo2 className="h-3.5 w-3.5" />
+          </span>
+          <p className="mt-2 text-sm text-gray-500">إجمالي المرتجعات</p>
           <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(report.totalReturnsValue)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-500">إجمالي الخسائر</p>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+            <PackageX className="h-3.5 w-3.5" />
+          </span>
+          <p className="mt-2 text-sm text-gray-500">إجمالي الخسائر</p>
           <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(report.totalDamageLoss)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-500">فروقات الجرد</p>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+            <Scale className="h-3.5 w-3.5" />
+          </span>
+          <p className="mt-2 text-sm text-gray-500">فروقات الجرد</p>
           <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(report.totalReconciliationLoss)}</p>
         </Card>
         {report.highestInvoice ? (
           <Card>
-            <p className="text-sm text-gray-500">أعلى فاتورة</p>
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+              <ArrowUp className="h-3.5 w-3.5" />
+            </span>
+            <p className="mt-2 text-sm text-gray-500">أعلى فاتورة</p>
             <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(report.highestInvoice.total_amount)}</p>
             <p className="mt-0.5 text-xs text-gray-400">{report.highestInvoice.invoice_number}</p>
           </Card>
         ) : null}
         {report.lowestInvoice ? (
           <Card>
-            <p className="text-sm text-gray-500">أدنى فاتورة</p>
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+              <ArrowDown className="h-3.5 w-3.5" />
+            </span>
+            <p className="mt-2 text-sm text-gray-500">أدنى فاتورة</p>
             <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(report.lowestInvoice.total_amount)}</p>
             <p className="mt-0.5 text-xs text-gray-400">{report.lowestInvoice.invoice_number}</p>
           </Card>
@@ -91,11 +140,16 @@ export function DailyReport({ report }: DailyReportProps) {
                 key={sale.id}
                 type="button"
                 onClick={() => setSelectedSale(sale)}
-                className="flex items-center justify-between gap-3 py-3 text-right"
+                className="flex items-center justify-between gap-3 py-3 text-right hover:bg-gray-50"
               >
-                <div className="flex flex-col">
-                  <span className="font-mono text-sm text-gray-700">{sale.invoice_number}</span>
-                  <span className="text-xs text-gray-500">{formatTime(sale.created_at)}</span>
+                <div className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+                    <Receipt className="h-4 w-4" />
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="font-mono text-sm text-gray-700">{sale.invoice_number}</span>
+                    <span className="text-xs text-gray-500">{formatTime(sale.created_at)}</span>
+                  </div>
                 </div>
                 <span className="font-semibold text-gray-900">{formatCurrency(sale.total_amount)}</span>
               </button>

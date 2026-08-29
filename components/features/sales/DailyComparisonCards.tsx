@@ -3,6 +3,7 @@
 import type { PeriodComparison } from "@/services/sales.service";
 import { formatCurrency, cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
+import { CalendarDays } from "lucide-react";
 
 interface DailyComparisonCardsProps {
   comparisonWithYesterday: PeriodComparison;
@@ -15,7 +16,12 @@ function ComparisonCard({ title, comparison }: { title: string; comparison: Peri
 
   return (
     <Card>
-      <p className="text-sm text-gray-500">{title}</p>
+      <div className="flex items-center gap-2">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+          <CalendarDays className="h-3.5 w-3.5" />
+        </span>
+        <p className="text-sm text-gray-500">{title}</p>
+      </div>
       <p className="mt-1 text-xl font-bold text-gray-900">{formatCurrency(comparison.currentRevenue)}</p>
       <p className="mt-1 text-xs text-gray-400">مقابل {formatCurrency(comparison.previousRevenue)}</p>
       {percent === null ? (

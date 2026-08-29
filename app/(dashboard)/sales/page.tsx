@@ -15,6 +15,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
 import { SalesExportModal } from "@/components/features/sales/SalesExportModal";
+import { Download } from "lucide-react";
 
 type PageTab = "today" | "trend" | "ranking";
 type RankingSubTab = "categories" | "products" | "cashiers";
@@ -84,11 +85,12 @@ export default function SalesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="border-b border-gray-100 pb-4">
         <BackToSettingsLink />
         <div className="mt-1 flex items-center justify-between gap-2">
           <h1 className="text-xl font-bold text-gray-900">تحليلات المبيعات</h1>
           <Button type="button" variant="secondary" size="sm" onClick={() => setIsExportModalOpen(true)}>
+            <Download className="h-4 w-4" />
             تصدير Excel
           </Button>
         </div>
