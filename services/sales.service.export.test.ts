@@ -152,4 +152,11 @@ describe("getSalesForExport", () => {
       getSalesForExport(supabase, new Date("2026-01-01"), new Date("2026-08-01")),
     ).rejects.toThrow("المدى الزمني الأقصى المسموح به هو 90 يوماً");
   });
+
+  it("does not throw for an exact 90-day inclusive range", async () => {
+    const supabase = createFakeSupabase({ sales: [], profiles: [], saleItems: [] });
+    const start = new Date("2026-01-01");
+    const end = new Date("2026-03-31"); // Jan(31) + Feb(28, 2026 not leap) + Mar(31) = 90 days inclusive
+    await expect(getSalesForExport(supabase, start, end)).resolves.toEqual([]);
+  });
 });

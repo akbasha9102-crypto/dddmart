@@ -32,9 +32,16 @@ export function buildSaleItemRows(saleId: string, items: CheckoutPayload["items"
 /** Maximum free-form date range (in days) accepted by any trend/ranking query, to protect mobile clients from accidentally-huge fetches. */
 export const MAX_RANGE_DAYS = 90;
 
+/** Midnight-normalized (local) copy of a Date, used to compute calendar-day spans independent of time-of-day. */
+function toLocalMidnight(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 /** Throws an Arabic error if the [startDate, endDate] span exceeds MAX_RANGE_DAYS. */
 function assertRangeWithinLimit(startDate: Date, endDate: Date): void {
-  const spanDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const spanDays = Math.round(
+    (toLocalMidnight(endDate).getTime() - toLocalMidnight(startDate).getTime()) / (1000 * 60 * 60 * 24),
+  ) + 1;
   if (spanDays > MAX_RANGE_DAYS) {
     throw new Error(`المدى الزمني الأقصى المسموح به هو ${MAX_RANGE_DAYS} يوماً`);
   }
