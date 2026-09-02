@@ -35,7 +35,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-bold text-gray-900">الإعدادات</h1>
+      <h1 className="text-xl font-bold text-gray-900">عام</h1>
 
       <div className="flex flex-col gap-2">
         {links.map((link) => {

@@ -1,4 +1,4 @@
-import { ShoppingCart, Package, Settings as SettingsIcon, BarChart3, Users, Archive as ArchiveIcon, Landmark, Store, Truck, Wallet, type LucideIcon } from "lucide-react";
+import { ShoppingCart, Package, Menu, BarChart3, Users, Archive as ArchiveIcon, Landmark, Store, Truck, Wallet, type LucideIcon } from "lucide-react";
 
 export interface NavLink {
   href: string;
@@ -14,7 +14,7 @@ export interface SettingsLink extends NavLink {
 export const PRIMARY_LINKS: NavLink[] = [
   { href: "/pos", label: "الكاشير", icon: ShoppingCart },
   { href: "/inventory", label: "المخزون", icon: Package },
-  { href: "/settings", label: "الإعدادات", icon: SettingsIcon },
+  { href: "/settings", label: "عام", icon: Menu },
 ];
 
 /** Links shown inside the /settings page. adminOnly links are hidden from cashiers there. */
@@ -30,7 +30,7 @@ export const SETTINGS_LINKS: SettingsLink[] = [
 
 const SETTINGS_PATHS = ["/settings", "/sales", "/shifts", "/customers", "/archive", "/employees", "/settings/store", "/suppliers"];
 
-/** True when pathname is /settings or any page reachable from it — used to keep the "الإعدادات" tab visually active on its sub-pages. */
+/** True when pathname is /settings or any page reachable from it — used to keep the "عام" tab visually active on its sub-pages. */
 export function isSettingsPath(pathname: string): boolean {
   return SETTINGS_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
