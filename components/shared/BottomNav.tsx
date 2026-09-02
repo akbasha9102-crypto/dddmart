@@ -23,7 +23,7 @@ export function BottomNav() {
             href={link.href}
             className={cn(
               "flex flex-1 flex-col items-center justify-center gap-1 text-sm font-medium text-gray-500",
-              isActive && "font-bold text-orange-600",
+              isActive && "font-bold text-brand-800",
             )}
           >
             <Icon className="h-5 w-5" />
