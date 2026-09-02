@@ -45,7 +45,7 @@ export function RangeDatePicker({ preset, customRange, onPresetChange, onCustomR
             }}
             className={cn(
               "rounded-full border px-4 py-2 text-sm font-medium transition-colors",
-              preset === option.value
+              preset === option.value && !isCustomActive
                 ? "border-brand-600 bg-brand-600 text-white"
                 : "border-gray-200 bg-white text-gray-600",
             )}
