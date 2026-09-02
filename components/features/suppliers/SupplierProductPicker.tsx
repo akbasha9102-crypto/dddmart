@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { ArrowRight, LayoutGrid, Plus, X } from "lucide-react";
+import { LayoutGrid, Plus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { listProductsWithCategory } from "@/services/products.service";
 import { listCategories } from "@/services/categories.service";
@@ -18,6 +18,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Toast } from "@/components/ui/Toast";
+import { BackButton } from "@/components/ui/BackButton";
 
 interface SupplierProductPickerProps {
   supplierId: string;
@@ -189,14 +190,7 @@ export function SupplierProductPicker({ supplierId, products, onChanged }: Suppl
       ) : (
         <div className="flex flex-col gap-4">
           <div>
-            <button
-              type="button"
-              onClick={closeAddMode}
-              className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-700"
-            >
-              <ArrowRight className="h-4 w-4" />
-              المنتجات المرتبطة
-            </button>
+            <BackButton onClick={closeAddMode} aria-label="رجوع للمنتجات المرتبطة" className="mb-2" />
             <h3 className="text-sm font-semibold text-gray-700">ربط منتج بالمورد</h3>
           </div>
 

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { recordSupplierPurchase, recordSupplierPayment } from "@/services/suppliers.service";
 import { useAuth } from "@/context/AuthContext";
@@ -13,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { SupplierProductPicker } from "@/components/features/suppliers/SupplierProductPicker";
+import { BackButton } from "@/components/ui/BackButton";
 
 interface SupplierDetailProps {
   detail: SupplierDetailData;
@@ -114,14 +114,7 @@ export function SupplierDetail({ detail, onBack, onChanged }: SupplierDetailProp
 
   return (
     <div className="flex flex-col gap-4">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex w-fit items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-700"
-      >
-        <ArrowRight className="h-4 w-4" />
-        رجوع لقائمة الموردين
-      </button>
+      <BackButton onClick={onBack} aria-label="رجوع لقائمة الموردين" className="w-fit" />
 
       <div>
         <h2 className="text-lg font-bold text-gray-900">{supplier.name}</h2>

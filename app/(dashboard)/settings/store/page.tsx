@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { ArrowRight } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useStoreProfile } from "@/hooks/useStoreProfile";
 import { updateStore } from "@/services/stores.service";
@@ -11,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
 import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
+import { BackButton } from "@/components/ui/BackButton";
 import { ChangePasswordForm } from "@/components/features/settings/ChangePasswordForm";
 
 export default function StoreSettingsPage() {
@@ -100,14 +100,7 @@ export default function StoreSettingsPage() {
       ) : (
         <>
           <div>
-            <button
-              type="button"
-              onClick={() => setView("info")}
-              className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-700"
-            >
-              <ArrowRight className="h-4 w-4" />
-              بيانات المتجر
-            </button>
+            <BackButton onClick={() => setView("info")} aria-label="رجوع لبيانات المتجر" className="mb-2" />
             <h1 className="text-xl font-bold text-gray-900">تغيير كلمة السر</h1>
           </div>
 
