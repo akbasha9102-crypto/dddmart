@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { PackagePlus, PackageX, ClipboardCheck } from "lucide-react";
 import type { Product } from "@/types/product";
 import { isLowStock } from "@/types/product";
@@ -13,14 +14,13 @@ import { Card } from "@/components/ui/Card";
 
 interface StockTableProps {
   products: Product[];
-  onEdit: (product: Product) => void;
   onDelete: (product: Product) => void;
   onReceiveStock: (product: Product) => void;
   onDamageStock: (product: Product) => void;
   onReconcileStock: (product: Product) => void;
 }
 
-export function StockTable({ products, onEdit, onDelete, onReceiveStock, onDamageStock, onReconcileStock }: StockTableProps) {
+export function StockTable({ products, onDelete, onReceiveStock, onDamageStock, onReconcileStock }: StockTableProps) {
   const { role } = useAuth();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
@@ -89,13 +89,12 @@ export function StockTable({ products, onEdit, onDelete, onReceiveStock, onDamag
                     تسوية
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => onEdit(product)}
+                <Link
+                  href={`/inventory/${product.id}/edit`}
                   className="flex h-11 flex-1 items-center justify-center rounded-lg text-brand-700 hover:bg-brand-50"
                 >
                   تعديل
-                </button>
+                </Link>
                 <button
                   type="button"
                   onClick={() => setConfirmingId(product.id)}

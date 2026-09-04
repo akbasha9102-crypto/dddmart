@@ -20,6 +20,18 @@ export async function getProductByBarcode(supabase: Client, barcode: string): Pr
   return data;
 }
 
+export async function getProduct(supabase: Client, id: string): Promise<Product | null> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", id)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 /**
  * Resolves a scanned/typed barcode to either a product sold at its base
  * unit, or a product sold via one of its extra units (product_units).

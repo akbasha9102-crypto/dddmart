@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { PackagePlus, PackageX, ClipboardCheck, Pencil, Trash2, LayoutGrid } from "lucide-react";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { isLowStock } from "@/types/product";
@@ -15,7 +16,6 @@ import { Input } from "@/components/ui/Input";
 interface CategoryProductListProps {
   products: ProductWithCategory[];
   categories: Category[];
-  onEdit: (product: ProductWithCategory) => void;
   onDelete: (product: ProductWithCategory) => void;
   onReceiveStock: (product: ProductWithCategory) => void;
   onDamageStock: (product: ProductWithCategory) => void;
@@ -26,7 +26,6 @@ interface CategoryProductListProps {
 export function CategoryProductList({
   products,
   categories,
-  onEdit,
   onDelete,
   onReceiveStock,
   onDamageStock,
@@ -104,7 +103,6 @@ export function CategoryProductList({
             <ProductRow
               key={product.id}
               product={product}
-              onEdit={onEdit}
               onDelete={onDelete}
               onReceiveStock={onReceiveStock}
               onDamageStock={onDamageStock}
@@ -119,14 +117,12 @@ export function CategoryProductList({
 
 function ProductRow({
   product,
-  onEdit,
   onDelete,
   onReceiveStock,
   onDamageStock,
   onReconcileStock,
 }: {
   product: ProductWithCategory;
-  onEdit: (product: ProductWithCategory) => void;
   onDelete: (product: ProductWithCategory) => void;
   onReceiveStock: (product: ProductWithCategory) => void;
   onDamageStock: (product: ProductWithCategory) => void;
@@ -187,14 +183,13 @@ function ProductRow({
             <ClipboardCheck className="h-4 w-4" />
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={() => onEdit(product)}
+        <Link
+          href={`/inventory/${product.id}/edit`}
           className="rounded-md p-1.5 text-gray-500 hover:bg-gray-200 hover:text-brand-700"
           aria-label="تعديل"
         >
           <Pencil className="h-4 w-4" />
-        </button>
+        </Link>
         <button
           type="button"
           onClick={() => setConfirming(true)}

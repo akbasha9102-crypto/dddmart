@@ -34,7 +34,6 @@ export default function InventoryPage() {
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isAddChoiceOpen, setIsAddChoiceOpen] = useState(false);
   const [isCategoryFormOpen, setIsCategoryFormOpen] = useState(false);
@@ -68,12 +67,6 @@ export default function InventoryPage() {
   }, [loadData]);
 
   function openCreateForm() {
-    setEditingProduct(null);
-    setIsFormOpen(true);
-  }
-
-  function openEditForm(product: Product | ProductWithCategory) {
-    setEditingProduct(product);
     setIsFormOpen(true);
   }
 
@@ -167,7 +160,6 @@ export default function InventoryPage() {
             <CategoryProductList
               products={filteredProductsWithCategory}
               categories={categories}
-              onEdit={openEditForm}
               onDelete={handleDeleteProduct}
               onReceiveStock={openReceiveStockForm}
               onDamageStock={setDamagingStockFor}
@@ -177,7 +169,6 @@ export default function InventoryPage() {
           <Card className="hidden overflow-hidden p-0 md:block">
             <StockTable
               products={filteredProducts}
-              onEdit={openEditForm}
               onDelete={handleDeleteProduct}
               onReceiveStock={openReceiveStockForm}
               onDamageStock={setDamagingStockFor}
@@ -187,13 +178,9 @@ export default function InventoryPage() {
         </>
       )}
 
-      <Modal
-        open={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        title={editingProduct ? "تعديل المنتج" : "منتج جديد"}
-      >
+      <Modal open={isFormOpen} onClose={() => setIsFormOpen(false)} title="منتج جديد">
         <ProductForm
-          product={editingProduct}
+          product={null}
           categories={categories}
           onSaved={handleSaved}
           onCancel={() => setIsFormOpen(false)}
