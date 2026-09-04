@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { usePOSContext } from "@/context/POSContext";
 import { useOfflineContext } from "@/context/OfflineContext";
@@ -10,10 +11,16 @@ import { listCategories } from "@/services/categories.service";
 import { getCachedCatalog } from "@/lib/offline/productCache";
 import { setCachedCategories, setCachedProducts } from "@/lib/offline/db";
 import type { Category, ProductWithCategory } from "@/types/product";
-import { CameraBarcodeScanner } from "@/components/features/shared/CameraBarcodeScanner";
 import { ManualProductPicker } from "@/components/features/pos/ManualProductPicker";
 import { Modal } from "@/components/ui/Modal";
 import { cn } from "@/lib/utils";
+
+// Loaded on demand: pulls in @zxing/browser + @zxing/library, only needed
+// once the cashier actually opens the camera-scan modal.
+const CameraBarcodeScanner = dynamic(
+  () => import("@/components/features/shared/CameraBarcodeScanner").then((mod) => mod.CameraBarcodeScanner),
+  { ssr: false, loading: () => null },
+);
 
 /**
  * Barcode entry: a physical HID scanner fires keystrokes globally (captured

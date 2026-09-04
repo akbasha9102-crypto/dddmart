@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import { useDailyReport } from "@/hooks/useDailyReport";
 import { useSalesAnalytics } from "@/hooks/useSalesAnalytics";
-import { DailyReport } from "@/components/features/sales/DailyReport";
-import { SalesTrendChart } from "@/components/features/sales/SalesTrendChart";
 import { RankingList } from "@/components/features/sales/RankingList";
 import { CashierRankingList } from "@/components/features/sales/CashierRankingList";
 import { RangeDatePicker } from "@/components/features/sales/RangeDatePicker";
@@ -16,6 +15,20 @@ import { Button } from "@/components/ui/Button";
 import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
 import { SalesExportModal } from "@/components/features/sales/SalesExportModal";
 import { Download } from "lucide-react";
+
+const LOADING_FALLBACK = <p className="p-6 text-center text-gray-400">جارٍ التحميل...</p>;
+
+// Loaded on demand: both pull in recharts, which should only load once a
+// tab that actually renders a chart (today's hourly breakdown, or the
+// trend tab) is opened, not eagerly with the rest of /sales.
+const DailyReport = dynamic(
+  () => import("@/components/features/sales/DailyReport").then((mod) => mod.DailyReport),
+  { ssr: false, loading: () => LOADING_FALLBACK },
+);
+const SalesTrendChart = dynamic(
+  () => import("@/components/features/sales/SalesTrendChart").then((mod) => mod.SalesTrendChart),
+  { ssr: false, loading: () => LOADING_FALLBACK },
+);
 
 type PageTab = "today" | "trend" | "ranking";
 type RankingSubTab = "categories" | "products" | "cashiers";

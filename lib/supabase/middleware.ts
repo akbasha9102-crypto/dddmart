@@ -6,6 +6,15 @@ import type { Database } from "@/types/database.types";
 const PUBLIC_PATHS = ["/login", "/subscription-paused"];
 
 /**
+ * Name of the short-lived cookie used to cache a positive ("store is
+ * active") result from getStoreActiveStatus, so most requests can skip the
+ * service-role network round trip entirely. Presence of the cookie is the
+ * whole signal — no sensitive data is stored in it.
+ */
+const STORE_ACTIVE_CACHE_COOKIE = "store-active-cache";
+const STORE_ACTIVE_CACHE_MAX_AGE_SECONDS = 90;
+
+/**
  * Refreshes the Supabase auth session on every request and redirects
  * unauthenticated users away from protected routes (POS, dashboard).
  */
@@ -42,30 +51,49 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && !isPublicPath) {
-    // Fail OPEN: only a definite is_active === false blocks anything. A
-    // network/DB hiccup here must never block a real, paying, active
-    // store's sales — so any error/missing-data case falls through
-    // untouched below.
-    //
-    // This lookup must use the service-role client, not the caller's
-    // RLS-scoped session: after the A2 migration, current_store_id() (and
-    // therefore every RLS policy keyed on it, including profiles' own
-    // select policy) returns nothing once a store is suspended — so the
-    // very row middleware needs to read to detect "suspended" is exactly
-    // the row RLS would hide from the caller. Only a privileged read can
-    // positively distinguish "confirmed suspended" from "lookup failed".
-    const storeActive = await getStoreActiveStatus(user.id);
+    // Latency optimization: a recent positive check is cached in a short-
+    // lived httpOnly cookie so most requests skip the service-role round
+    // trip below entirely. This only ever skips the check when the last
+    // known result was "active" — it never suppresses enforcement for a
+    // suspended store, and it doesn't change fail-open semantics.
+    const hasFreshActiveCache = request.cookies.get(STORE_ACTIVE_CACHE_COOKIE) !== undefined;
 
-    if (storeActive === false) {
-      const isApiRequest = request.nextUrl.pathname.startsWith("/api/");
+    if (!hasFreshActiveCache) {
+      // Fail OPEN: only a definite is_active === false blocks anything. A
+      // network/DB hiccup here must never block a real, paying, active
+      // store's sales — so any error/missing-data case falls through
+      // untouched below.
+      //
+      // This lookup must use the service-role client, not the caller's
+      // RLS-scoped session: after the A2 migration, current_store_id() (and
+      // therefore every RLS policy keyed on it, including profiles' own
+      // select policy) returns nothing once a store is suspended — so the
+      // very row middleware needs to read to detect "suspended" is exactly
+      // the row RLS would hide from the caller. Only a privileged read can
+      // positively distinguish "confirmed suspended" from "lookup failed".
+      const storeActive = await getStoreActiveStatus(user.id);
 
-      if (isApiRequest) {
-        return NextResponse.json({ error: "الاشتراك متوقف لهذا المتجر" }, { status: 403 });
+      if (storeActive === false) {
+        const isApiRequest = request.nextUrl.pathname.startsWith("/api/");
+
+        if (isApiRequest) {
+          return NextResponse.json({ error: "الاشتراك متوقف لهذا المتجر" }, { status: 403 });
+        }
+
+        const pausedUrl = request.nextUrl.clone();
+        pausedUrl.pathname = "/subscription-paused";
+        return NextResponse.redirect(pausedUrl);
       }
 
-      const pausedUrl = request.nextUrl.clone();
-      pausedUrl.pathname = "/subscription-paused";
-      return NextResponse.redirect(pausedUrl);
+      if (storeActive === true) {
+        response.cookies.set(STORE_ACTIVE_CACHE_COOKIE, "1", {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          path: "/",
+          maxAge: STORE_ACTIVE_CACHE_MAX_AGE_SECONDS,
+        });
+      }
     }
   }
 

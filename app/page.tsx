@@ -1,15 +1,11 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 
-export default async function HomePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
+/**
+ * `/` is not in middleware's PUBLIC_PATHS, so middleware already redirects
+ * any unauthenticated request away to `/login` before this component ever
+ * runs — an authenticated user reaching here just needs to land on `/pos`.
+ * See lib/supabase/middleware.ts.
+ */
+export default function HomePage() {
   redirect("/pos");
 }

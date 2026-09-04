@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import { createProduct, isUniqueViolation } from "@/services/products.service";
 import { useAuth } from "@/context/AuthContext";
@@ -11,8 +12,14 @@ import type { Category } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { BarcodeGenerator, generateBarcode } from "./BarcodeGenerator";
-import { CameraBarcodeScanner } from "@/components/features/shared/CameraBarcodeScanner";
 import { ProfitPreview } from "./ProfitPreview";
+
+// Loaded on demand: pulls in @zxing/browser + @zxing/library, only needed
+// once the user actually opens the camera-scan modal.
+const CameraBarcodeScanner = dynamic(
+  () => import("@/components/features/shared/CameraBarcodeScanner").then((mod) => mod.CameraBarcodeScanner),
+  { ssr: false, loading: () => null },
+);
 
 interface QuickAddProductFormProps {
   categories: Category[];
