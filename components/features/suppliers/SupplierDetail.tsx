@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { SupplierProductPicker } from "@/components/features/suppliers/SupplierProductPicker";
+import { SupplierReceiveStockForm } from "@/components/features/suppliers/SupplierReceiveStockForm";
 import { BackButton } from "@/components/ui/BackButton";
 
 interface SupplierDetailProps {
@@ -136,6 +137,13 @@ export function SupplierDetail({ detail, onBack, onChanged }: SupplierDetailProp
           تسجيل دفعة
         </Button>
       </div>
+
+      <SupplierReceiveStockForm
+        supplierId={supplier.id}
+        supplierName={supplier.name}
+        products={products}
+        onChanged={onChanged}
+      />
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-semibold text-gray-700">الحركات</h3>
