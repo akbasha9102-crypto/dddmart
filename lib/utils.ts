@@ -27,14 +27,14 @@ export function formatDateTime(date: string | Date): string {
     year: "numeric",
     month: "short",
     day: "numeric",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
   }).format(new Date(date));
 }
 
 export function formatTime(date: string | Date): string {
   return new Intl.DateTimeFormat("ar-IQ", {
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
   }).format(new Date(date));
 }
