@@ -9,14 +9,20 @@ import { ArchiveList } from "@/components/features/archive/ArchiveList";
 import { cn } from "@/lib/utils";
 import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
 
-type RangeOption = "today" | "7" | "30" | "all";
+type RangeOption = "today" | "7" | "30" | "all" | "custom";
 
 const RANGE_OPTIONS: { value: RangeOption; label: string }[] = [
   { value: "today", label: "اليوم" },
   { value: "7", label: "آخر 7 أيام" },
   { value: "30", label: "آخر 30 يوماً" },
   { value: "all", label: "الكل" },
+  { value: "custom", label: "تحديد" },
 ];
+
+interface CustomArchiveRange {
+  startDate: string;
+  endDate: string;
+}
 
 const ENTITY_OPTIONS: { value: OperationEntityType | "all"; label: string }[] = [
   { value: "all", label: "الكل" },
@@ -41,22 +47,42 @@ function rangeToStartDate(range: RangeOption): Date | undefined {
   return startDate;
 }
 
+// Mirrors toExportRange in components/features/sales/SalesExportModal.tsx (not imported to avoid
+// a cross-feature type/util dependency beyond the precedented RangeDatePicker component reuse) —
+// extends the end date to end-of-day so a same-day range doesn't collapse to a zero-width query window.
+function toArchiveQueryRange(customRange: CustomArchiveRange): { startDate: Date; endDate: Date } {
+  const startDate = new Date(customRange.startDate);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(customRange.endDate);
+  endDate.setHours(23, 59, 59, 999);
+  return { startDate, endDate };
+}
+
 export default function ArchivePage() {
   const [range, setRange] = useState<RangeOption>("today");
+  const [customRange, setCustomRange] = useState<CustomArchiveRange>({ startDate: "", endDate: "" });
   const [entityType, setEntityType] = useState<OperationEntityType | "all">("all");
   const [operations, setOperations] = useState<OperationLogWithActor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadData = useCallback(async () => {
+    if (range === "custom" && (!customRange.startDate || !customRange.endDate)) {
+      return;
+    }
     setIsLoading(true);
     const supabase = createClient();
+    const { startDate, endDate } =
+      range === "custom"
+        ? toArchiveQueryRange(customRange)
+        : { startDate: rangeToStartDate(range), endDate: undefined };
     const data = await listOperations(supabase, {
-      startDate: rangeToStartDate(range),
+      startDate,
+      endDate,
       entityType: entityType === "all" ? undefined : entityType,
     });
     setOperations(data);
     setIsLoading(false);
-  }, [range, entityType]);
+  }, [range, customRange, entityType]);
 
   useEffect(() => {
     void loadData();
@@ -85,6 +111,31 @@ export default function ArchivePage() {
             </button>
           ))}
         </div>
+
+        {range === "custom" ? (
+          <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+            <label className="flex items-center gap-2">
+              من
+              <input
+                type="date"
+                value={customRange.startDate}
+                max={customRange.endDate || undefined}
+                onChange={(event) => setCustomRange({ ...customRange, startDate: event.target.value })}
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="flex items-center gap-2">
+              إلى
+              <input
+                type="date"
+                value={customRange.endDate}
+                min={customRange.startDate || undefined}
+                onChange={(event) => setCustomRange({ ...customRange, endDate: event.target.value })}
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+          </div>
+        ) : null}
 
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {ENTITY_OPTIONS.map((option) => (
