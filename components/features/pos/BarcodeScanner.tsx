@@ -113,7 +113,12 @@ export function BarcodeScanner() {
         <div className="rounded-lg bg-red-100 px-3 py-1 text-sm text-red-700">{scanError}</div>
       ) : null}
 
-      <Modal open={isManualOpen} onClose={() => setIsManualOpen(false)} title="إضافة يدوية">
+      <Modal
+        open={isManualOpen}
+        onClose={() => setIsManualOpen(false)}
+        title="إضافة يدوية"
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col"
+      >
         <ManualProductPicker
           products={products}
           categories={categories}

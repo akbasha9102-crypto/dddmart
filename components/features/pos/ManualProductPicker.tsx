@@ -73,7 +73,7 @@ export function ManualProductPicker({ products, categories, open, onAdd, onClose
   }
 
   return (
-    <div className="flex max-h-64 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <Input
         type="text"
         placeholder="ابحث باسم المنتج"

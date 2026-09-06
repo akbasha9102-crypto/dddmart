@@ -291,7 +291,6 @@ export default function POSPage() {
               <Input
                 type="number"
                 label="المبلغ المستلم"
-                autoFocus
                 value={paidAmount}
                 onChange={(event) => setPaidAmount(event.target.value)}
                 min={0}
