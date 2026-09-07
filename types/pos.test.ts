@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { productToCartItem, productUnitToCartItem } from "@/types/pos";
+import { calculateTotals, productToCartItem, productUnitToCartItem } from "@/types/pos";
+import type { CartItem } from "@/types/pos";
 import type { Product, ProductUnit } from "@/types/product";
 
 const PRODUCT: Product = {
@@ -64,5 +65,17 @@ describe("productUnitToCartItem", () => {
   it("multiplies costPrice by the unit's conversion_factor", () => {
     const item = productUnitToCartItem(PRODUCT, CARTON_UNIT, 2);
     expect(item.costPrice).toBe(PRODUCT.cost_price * CARTON_UNIT.conversion_factor);
+  });
+});
+
+describe("calculateTotals", () => {
+  it("clamps totalAmount to 0 for an oversized discount WITHOUT throwing — pure clamp-only helper, live cart update loop must never throw on keystroke", () => {
+    const items: CartItem[] = [
+      { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 100, costPrice: 60, quantity: 2, availableStock: 8 },
+    ];
+
+    const totals = calculateTotals(items, 9999);
+
+    expect(totals).toEqual({ subtotal: 200, discountAmount: 9999, totalAmount: 0 });
   });
 });

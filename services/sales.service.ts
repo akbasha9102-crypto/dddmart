@@ -216,6 +216,14 @@ export async function createSale(supabase: Client, payload: CheckoutPayload, sto
   const customerId = payload.customerId as string | null;
 
   const { subtotal, discountAmount, totalAmount } = calculateTotals(payload.items, payload.discountAmount);
+
+  if (discountAmount < 0) {
+    throw new Error("قيمة الخصم يجب أن تكون صفراً أو أكبر");
+  }
+  if (discountAmount > subtotal) {
+    throw new Error("قيمة الخصم أكبر من إجمالي الفاتورة");
+  }
+
   const paidAmount = paymentMethod === "credit" ? 0 : payload.paidAmount;
   const changeAmount = paymentMethod === "credit" ? 0 : Math.max(payload.paidAmount - totalAmount, 0);
 

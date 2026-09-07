@@ -322,9 +322,12 @@ export default function POSPage() {
             type="number"
             label="مبلغ الخصم"
             min={0}
+            max={totals.subtotal}
             autoFocus
             value={discountAmount || ""}
-            onChange={(event) => setDiscountAmount(Number(event.target.value) || 0)}
+            onChange={(event) =>
+              setDiscountAmount(Math.min(Math.max(Number(event.target.value) || 0, 0), totals.subtotal))
+            }
           />
           <Button size="lg" onClick={() => setIsDiscountOpen(false)}>تم</Button>
         </div>

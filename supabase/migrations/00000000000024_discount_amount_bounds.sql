@@ -1,0 +1,44 @@
+-- Bounds on sales.discount_amount — fixes audit items 2.1 and 1.3
+-- (mashee_mart_audit_report.md), both rooted in the same POS checkout
+-- discount field.
+--
+-- 2.1 (critical): calculateTotals (types/pos.ts) computes
+-- totalAmount = Math.max(subtotal - discountAmount, 0) — it clamps the
+-- total to zero but never rejects an oversized discount, and createSale
+-- (services/sales.service.ts) never validated discount_amount against
+-- subtotal before inserting into `sales`. A cashier could type any
+-- discount amount, however large, and zero out an invoice for free while
+-- still handing over every item in the cart.
+--
+-- 1.3 (medium): the discount input in the POS checkout UI
+-- (app/(dashboard)/pos/page.tsx) only had HTML min={0}, which does not
+-- stop a negative value from being typed or pasted directly. Since
+-- totalAmount = subtotal - discountAmount, a negative discount silently
+-- INCREASES the total instead of decreasing it — an inverted, confusing
+-- charge with no legitimate use.
+--
+-- Both bugs share the exact same input field and the exact same
+-- validation shape, so they're fixed together here. This is the real
+-- enforcement layer: a CHECK constraint on the sales table itself, so
+-- the rule holds even if a caller bypasses createSale entirely and
+-- issues a direct Supabase client insert. It is deliberately paired
+-- with an application-level check in createSale (friendlier Arabic
+-- error before hitting this raw DB constraint) and a UI-level
+-- max/clamp on the discount input (UX polish only) — same three-layer
+-- defense pattern already used in 00000000000021_atomic_return_recording.sql,
+-- 00000000000022_validate_store_id_on_signup.sql, and
+-- 00000000000023_admin_only_product_category_writes.sql.
+--
+-- Pre-migration data check (live DB, read-only query, run before writing
+-- this migration): all 71 existing `sales` rows already satisfy
+-- discount_amount >= 0 and discount_amount <= subtotal (worst observed
+-- value of discount_amount - subtotal was -200.00, i.e. comfortably
+-- within bounds) — zero violating rows found, so no backfill/clamp step
+-- is needed before adding the constraint below. held_sales was also
+-- checked (0 rows currently exist, and it has no stored `subtotal`
+-- column to check against in the first place — its discount is only
+-- validated for real once a held sale is resumed and actually goes
+-- through createSale at checkout).
+alter table sales
+  add constraint sales_discount_amount_bounds
+  check (discount_amount >= 0 and discount_amount <= subtotal);

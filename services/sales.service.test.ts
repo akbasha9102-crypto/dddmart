@@ -170,3 +170,41 @@ describe("createSale — credit sale path", () => {
     expect(customerTransactionsInsertSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("createSale — discount validation", () => {
+  it("succeeds when discount equals subtotal exactly (boundary): discount_amount = subtotal, total_amount = 0", async () => {
+    const { supabase, salesInsertSpy } = createFakeSupabase(CASH_SALE);
+
+    await createSale(supabase, { ...BASE_PAYLOAD, discountAmount: 200, paidAmount: 0 }, "store-1");
+
+    expect(salesInsertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ subtotal: 200, discount_amount: 200, total_amount: 0 }),
+    );
+  });
+
+  it("rejects a discount slightly over subtotal with the Arabic over-subtotal error", async () => {
+    const { supabase } = createFakeSupabase(CASH_SALE);
+
+    await expect(
+      createSale(supabase, { ...BASE_PAYLOAD, discountAmount: 200.01, paidAmount: 0 }, "store-1"),
+    ).rejects.toThrow("قيمة الخصم أكبر من إجمالي الفاتورة");
+  });
+
+  it("rejects a negative discount with the Arabic negative-value error", async () => {
+    const { supabase } = createFakeSupabase(CASH_SALE);
+
+    await expect(
+      createSale(supabase, { ...BASE_PAYLOAD, discountAmount: -1 }, "store-1"),
+    ).rejects.toThrow("قيمة الخصم يجب أن تكون صفراً أو أكبر");
+  });
+
+  it("succeeds with a discount of 0 (common case)", async () => {
+    const { supabase, salesInsertSpy } = createFakeSupabase(CASH_SALE);
+
+    await createSale(supabase, { ...BASE_PAYLOAD, discountAmount: 0 }, "store-1");
+
+    expect(salesInsertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ discount_amount: 0 }),
+    );
+  });
+});
