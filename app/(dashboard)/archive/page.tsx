@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { listOperations } from "@/services/archive.service";
 import type { OperationLogWithActor } from "@/types/archive";
@@ -58,30 +58,74 @@ export default function ArchivePage() {
   const [customRange, setCustomRange] = useState<CustomArchiveRange>({ startDate: "", endDate: "" });
   const [entityType, setEntityType] = useState<OperationEntityType | "all">("all");
   const [operations, setOperations] = useState<OperationLogWithActor[]>([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const loadData = useCallback(async () => {
-    if (range === "custom" && (!customRange.startDate || !customRange.endDate)) {
-      return;
-    }
-    setIsLoading(true);
-    const supabase = createClient();
-    const { startDate, endDate } =
-      range === "custom"
-        ? toArchiveQueryRange(customRange)
-        : { startDate: rangeToStartDate(range), endDate: undefined };
-    const data = await listOperations(supabase, {
-      startDate,
-      endDate,
-      entityType: entityType === "all" ? undefined : entityType,
-    });
-    setOperations(data);
-    setIsLoading(false);
-  }, [range, customRange, entityType]);
+  const buildFilter = useCallback(
+    (pageIndex: number) => {
+      const { startDate, endDate } =
+        range === "custom"
+          ? toArchiveQueryRange(customRange)
+          : { startDate: rangeToStartDate(range), endDate: undefined };
+      return {
+        startDate,
+        endDate,
+        entityType: entityType === "all" ? undefined : entityType,
+        page: pageIndex,
+      };
+    },
+    [range, customRange, entityType],
+  );
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    if (range === "custom" && (!customRange.startDate || !customRange.endDate)) return;
+
+    let cancelled = false;
+    setIsLoading(true);
+    setOperations([]);
+    setPage(0);
+    setHasMore(true);
+
+    const supabase = createClient();
+    void listOperations(supabase, buildFilter(0)).then(({ operations: data, hasMore: more }) => {
+      if (cancelled) return;
+      setOperations(data);
+      setHasMore(more);
+      setIsLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [range, customRange, entityType, buildFilter]);
+
+  const loadNextPage = useCallback(async () => {
+    if (isLoading || isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    const nextPage = page + 1;
+    const supabase = createClient();
+    const { operations: data, hasMore: more } = await listOperations(supabase, buildFilter(nextPage));
+    setOperations((prev) => [...prev, ...data]);
+    setPage(nextPage);
+    setHasMore(more);
+    setIsLoadingMore(false);
+  }, [isLoading, isLoadingMore, hasMore, page, buildFilter]);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadNextPage();
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loadNextPage]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -154,7 +198,14 @@ export default function ArchivePage() {
       {isLoading ? (
         <p className="p-6 text-center text-gray-400">جارٍ التحميل...</p>
       ) : (
-        <ArchiveList operations={operations} />
+        <>
+          <ArchiveList operations={operations} />
+          {hasMore ? (
+            <div ref={sentinelRef} className="flex justify-center p-4">
+              {isLoadingMore ? <p className="text-sm text-gray-400">جارٍ تحميل المزيد...</p> : null}
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );

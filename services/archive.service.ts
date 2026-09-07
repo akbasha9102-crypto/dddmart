@@ -42,16 +42,35 @@ export async function logOperation(supabase: Client, input: LogOperationInput): 
   }
 }
 
+export const ARCHIVE_PAGE_SIZE = 50;
+
 export interface ArchiveFilter {
   startDate?: Date;
   endDate?: Date;
   actionType?: OperationActionType;
   entityType?: OperationEntityType;
   userId?: string;
+  /** Zero-based page index; page N fetches rows [N*pageSize, N*pageSize + pageSize - 1]. Defaults to 0. */
+  page?: number;
 }
 
-export async function listOperations(supabase: Client, filter?: ArchiveFilter): Promise<OperationLogWithActor[]> {
-  let query = supabase.from("operations_log").select("*").order("created_at", { ascending: false });
+export interface ListOperationsResult {
+  operations: OperationLogWithActor[];
+  /** true when this page came back full-size, implying more rows likely remain. */
+  hasMore: boolean;
+}
+
+export async function listOperations(supabase: Client, filter?: ArchiveFilter): Promise<ListOperationsResult> {
+  const page = filter?.page ?? 0;
+  const from = page * ARCHIVE_PAGE_SIZE;
+  const to = from + ARCHIVE_PAGE_SIZE - 1;
+
+  let query = supabase
+    .from("operations_log")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(from, to);
 
   if (filter?.startDate) query = query.gte("created_at", filter.startDate.toISOString());
   if (filter?.endDate) query = query.lte("created_at", filter.endDate.toISOString());
@@ -79,8 +98,11 @@ export async function listOperations(supabase: Client, filter?: ArchiveFilter): 
     (profiles ?? []).forEach((profile) => actorNameById.set(profile.id, profile.full_name));
   }
 
-  return operations.map((op) => ({
-    ...op,
-    actorName: op.user_id ? (actorNameById.get(op.user_id) ?? "غير معروف") : "غير معروف",
-  }));
+  return {
+    operations: operations.map((op) => ({
+      ...op,
+      actorName: op.user_id ? (actorNameById.get(op.user_id) ?? "غير معروف") : "غير معروف",
+    })),
+    hasMore: operations.length === ARCHIVE_PAGE_SIZE,
+  };
 }

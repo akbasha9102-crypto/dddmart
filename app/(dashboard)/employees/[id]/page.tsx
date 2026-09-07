@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { createClient } from "@/lib/supabase/client";
@@ -45,23 +45,68 @@ export default function EmployeeDetailPage() {
   const [range, setRange] = useState<RangeOption>("today");
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [operations, setOperations] = useState<OperationLogWithActor[]>([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    const supabase = createClient();
-    const [employeeResult, operationsResult] = await Promise.all([
-      getEmployee(supabase, employeeId),
-      listOperations(supabase, { userId: employeeId, startDate: rangeToStartDate(range) }),
-    ]);
-    setEmployee(employeeResult);
-    setOperations(operationsResult);
-    setIsLoading(false);
-  }, [employeeId, range]);
+  const buildFilter = useCallback(
+    (pageIndex: number) => ({
+      userId: employeeId,
+      startDate: rangeToStartDate(range),
+      page: pageIndex,
+    }),
+    [employeeId, range],
+  );
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    let cancelled = false;
+    setIsLoading(true);
+    setOperations([]);
+    setPage(0);
+    setHasMore(true);
+
+    const supabase = createClient();
+    void Promise.all([getEmployee(supabase, employeeId), listOperations(supabase, buildFilter(0))]).then(
+      ([employeeResult, { operations: data, hasMore: more }]) => {
+        if (cancelled) return;
+        setEmployee(employeeResult);
+        setOperations(data);
+        setHasMore(more);
+        setIsLoading(false);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeId, range, buildFilter]);
+
+  const loadNextPage = useCallback(async () => {
+    if (isLoading || isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    const nextPage = page + 1;
+    const supabase = createClient();
+    const { operations: data, hasMore: more } = await listOperations(supabase, buildFilter(nextPage));
+    setOperations((prev) => [...prev, ...data]);
+    setPage(nextPage);
+    setHasMore(more);
+    setIsLoadingMore(false);
+  }, [isLoading, isLoadingMore, hasMore, page, buildFilter]);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadNextPage();
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loadNextPage]);
 
   if (!isAdmin) {
     return (
@@ -113,6 +158,11 @@ export default function EmployeeDetailPage() {
           </div>
 
           <ArchiveList operations={operations} />
+          {hasMore ? (
+            <div ref={sentinelRef} className="flex justify-center p-4">
+              {isLoadingMore ? <p className="text-sm text-gray-400">جارٍ تحميل المزيد...</p> : null}
+            </div>
+          ) : null}
         </>
       )}
     </div>
