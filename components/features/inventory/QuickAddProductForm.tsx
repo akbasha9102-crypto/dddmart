@@ -42,6 +42,11 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (Number(costPrice) < 0) {
+      setError("سعر الشراء لا يمكن أن يكون سالباً");
+      return;
+    }
+
     if (Number(salePrice) <= 0) {
       setError("سعر البيع يجب أن يكون أكبر من صفر");
       return;
@@ -127,7 +132,7 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
           min={0}
           step="0.01"
           value={costPrice}
-          onChange={(event) => setCostPrice(event.target.value)}
+          onChange={(event) => setCostPrice(String(Math.max(0, Number(event.target.value) || 0)))}
           className="h-14 text-lg"
           required
         />
@@ -138,7 +143,7 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
           min={0}
           step="0.01"
           value={salePrice}
-          onChange={(event) => setSalePrice(event.target.value)}
+          onChange={(event) => setSalePrice(String(Math.max(0, Number(event.target.value) || 0)))}
           className="h-14 text-lg"
           required
         />
