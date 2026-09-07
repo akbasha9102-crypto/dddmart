@@ -5,6 +5,7 @@ import { Pencil, Trash2, Undo2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { deleteCategory, updateCategory } from "@/services/categories.service";
 import { useAuth } from "@/context/AuthContext";
+import { isAdminRole } from "@/lib/employees/adminCheck";
 import { getCategoryIcon } from "@/lib/categoryIcons";
 import type { Category } from "@/types/product";
 import { Modal } from "@/components/ui/Modal";
@@ -20,7 +21,7 @@ interface CategoryManageSheetProps {
 
 /** Modal listing every category (including inactive) with inline edit/delete/restore actions. */
 export function CategoryManageSheet({ categories, onChanged, onClose }: CategoryManageSheetProps) {
-  const { user, storeId } = useAuth();
+  const { user, storeId, role } = useAuth();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -107,36 +108,38 @@ export function CategoryManageSheet({ categories, onChanged, onClose }: Category
                 </span>
               ) : null}
 
-              {category.is_active ? (
-                <>
+              {isAdminRole(role) ? (
+                category.is_active ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(category.id)}
+                      className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-brand-700"
+                      aria-label="تعديل"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingDeleteId(category.id)}
+                      className="rounded-md p-2 text-gray-500 hover:bg-red-50 hover:text-red-600"
+                      aria-label="حذف"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => setEditingId(category.id)}
-                    className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-brand-700"
-                    aria-label="تعديل"
+                    disabled={busyId === category.id}
+                    onClick={() => void handleRestore(category)}
+                    className="rounded-md p-2 text-gray-500 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50"
+                    aria-label="استعادة"
                   >
-                    <Pencil className="h-4 w-4" />
+                    <Undo2 className="h-4 w-4" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingDeleteId(category.id)}
-                    className="rounded-md p-2 text-gray-500 hover:bg-red-50 hover:text-red-600"
-                    aria-label="حذف"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busyId === category.id}
-                  onClick={() => void handleRestore(category)}
-                  className="rounded-md p-2 text-gray-500 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50"
-                  aria-label="استعادة"
-                >
-                  <Undo2 className="h-4 w-4" />
-                </button>
-              )}
+                )
+              ) : null}
             </div>
           );
         })}

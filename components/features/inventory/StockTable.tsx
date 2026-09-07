@@ -89,19 +89,23 @@ export function StockTable({ products, onDelete, onReceiveStock, onDamageStock, 
                     تسوية
                   </button>
                 ) : null}
-                <Link
-                  href={`/inventory/${product.id}/edit`}
-                  className="flex h-11 flex-1 items-center justify-center rounded-lg text-brand-700 hover:bg-brand-50"
-                >
-                  تعديل
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingId(product.id)}
-                  className="flex h-11 flex-1 items-center justify-center rounded-lg text-red-600 hover:bg-red-50"
-                >
-                  حذف
-                </button>
+                {isAdminRole(role) ? (
+                  <Link
+                    href={`/inventory/${product.id}/edit`}
+                    className="flex h-11 flex-1 items-center justify-center rounded-lg text-brand-700 hover:bg-brand-50"
+                  >
+                    تعديل
+                  </Link>
+                ) : null}
+                {isAdminRole(role) ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingId(product.id)}
+                    className="flex h-11 flex-1 items-center justify-center rounded-lg text-red-600 hover:bg-red-50"
+                  >
+                    حذف
+                  </button>
+                ) : null}
               </div>
             </div>
           )}

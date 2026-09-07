@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getProduct } from "@/services/products.service";
 import { listCategories } from "@/services/categories.service";
+import { useAuth } from "@/context/AuthContext";
+import { isAdminRole } from "@/lib/employees/adminCheck";
 import type { Product, Category } from "@/types/product";
 import { BackButton } from "@/components/ui/BackButton";
 import { ProductForm } from "@/components/features/inventory/ProductForm";
@@ -13,6 +15,7 @@ export default function EditProductPage() {
   const params = useParams<{ id: string }>();
   const productId = params.id;
   const router = useRouter();
+  const { role } = useAuth();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -40,6 +43,15 @@ export default function EditProductPage() {
 
   function handleCancel() {
     router.push("/inventory");
+  }
+
+  if (!isAdminRole(role)) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 p-10 text-center">
+        <p className="text-lg font-semibold text-gray-900">هذي الصفحة للمالك فقط</p>
+        <p className="text-sm text-gray-500">ما عندك صلاحية تعديل المنتجات.</p>
+      </div>
+    );
   }
 
   if (isLoading) {

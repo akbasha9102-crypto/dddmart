@@ -183,21 +183,25 @@ function ProductRow({
             <ClipboardCheck className="h-4 w-4" />
           </button>
         ) : null}
-        <Link
-          href={`/inventory/${product.id}/edit`}
-          className="rounded-md p-1.5 text-gray-500 hover:bg-gray-200 hover:text-brand-700"
-          aria-label="تعديل"
-        >
-          <Pencil className="h-4 w-4" />
-        </Link>
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="rounded-md p-1.5 text-gray-500 hover:bg-red-100 hover:text-red-600"
-          aria-label="حذف"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        {isAdminRole(role) ? (
+          <Link
+            href={`/inventory/${product.id}/edit`}
+            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-200 hover:text-brand-700"
+            aria-label="تعديل"
+          >
+            <Pencil className="h-4 w-4" />
+          </Link>
+        ) : null}
+        {isAdminRole(role) ? (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="rounded-md p-1.5 text-gray-500 hover:bg-red-100 hover:text-red-600"
+            aria-label="حذف"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        ) : null}
       </div>
     </div>
   );
