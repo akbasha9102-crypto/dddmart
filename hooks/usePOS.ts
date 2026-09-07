@@ -143,6 +143,75 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
     >
   >(new Map());
 
+  /**
+   * The actual stock-adjustment side effect for one settled quantity-change
+   * batch — shared by the debounce timer in updateQuantity below AND by
+   * flushPendingQuantityTimers, so there is exactly one implementation of
+   * "how a pending delta gets applied" rather than two copies that could
+   * drift apart. Caller is responsible for clearing the timer and removing
+   * the barcode's entry from pendingQuantityRef before/around calling this;
+   * this function only performs the DB/IndexedDB adjustment and, on
+   * insufficient stock, the same rollback (cart.updateQuantity back to
+   * baseline + setScanError) that has always applied here.
+   */
+  const applyPendingAdjustment = useCallback(
+    async (
+      barcode: string,
+      pending: { baseline: number; netBaseDelta: number; productId: string; name: string },
+    ) => {
+      const { baseline, netBaseDelta, productId, name } = pending;
+      if (netBaseDelta === 0) return;
+
+      if (!isOnline) {
+        const updated = await applyLocalStockDelta(productId, -netBaseDelta);
+        if (netBaseDelta > 0 && !updated) {
+          cart.updateQuantity(barcode, baseline);
+          setScanError(`الكمية المتوفرة من ${name} غير كافية`);
+        }
+        return;
+      }
+
+      const supabase = createClient();
+      if (netBaseDelta < 0) {
+        await incrementStock(supabase, productId, -netBaseDelta);
+      } else {
+        const updated = await decrementStock(supabase, productId, netBaseDelta);
+        if (!updated) {
+          cart.updateQuantity(barcode, baseline);
+          setScanError(`الكمية المتوفرة من ${name} غير كافية`);
+        }
+      }
+    },
+    [cart, isOnline],
+  );
+
+  /**
+   * Cancels every in-flight quantity-adjustment debounce timer and
+   * immediately runs the stock adjustment each one was about to perform,
+   * instead of letting it fire ~200ms later on its own. Must be awaited
+   * (and called) at the very start of removeItem/clear/checkout/
+   * holdCurrentSale, before any of those functions read cart state or touch
+   * stock themselves — otherwise a timer left dangling past that point
+   * would apply a stale netBaseDelta to a product no longer in the cart
+   * (removeItem/clear) or after the sale/hold has already been recorded
+   * (checkout/holdCurrentSale), producing a stock adjustment "orphaned"
+   * from any current operation. Entries are flushed one at a time (not
+   * Promise.all) — in practice this map holds at most a couple of entries
+   * (one per barcode mid-debounce), and sequential flushing keeps the
+   * insufficient-stock rollback path (which mutates cart state) trivial to
+   * reason about without worrying about interleaved writes.
+   */
+  const flushPendingQuantityTimers = useCallback(async () => {
+    const pending = pendingQuantityRef.current;
+    if (pending.size === 0) return;
+
+    for (const [barcode, entry] of pending) {
+      clearTimeout(entry.timer);
+      pending.delete(barcode);
+      await applyPendingAdjustment(barcode, entry);
+    }
+  }, [applyPendingAdjustment]);
+
   const updateQuantity = useCallback(
     (barcode: string, quantity: number) => {
       const item = findCartItemByBarcode(cart.items, barcode);
@@ -165,28 +234,7 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
       const timer = setTimeout(() => {
         void (async () => {
           pendingQuantityRef.current.delete(barcode);
-
-          if (netBaseDelta === 0) return;
-
-          if (!isOnline) {
-            const updated = await applyLocalStockDelta(productId, -netBaseDelta);
-            if (netBaseDelta > 0 && !updated) {
-              cart.updateQuantity(barcode, baseline);
-              setScanError(`الكمية المتوفرة من ${name} غير كافية`);
-            }
-            return;
-          }
-
-          const supabase = createClient();
-          if (netBaseDelta < 0) {
-            await incrementStock(supabase, productId, -netBaseDelta);
-          } else {
-            const updated = await decrementStock(supabase, productId, netBaseDelta);
-            if (!updated) {
-              cart.updateQuantity(barcode, baseline);
-              setScanError(`الكمية المتوفرة من ${name} غير كافية`);
-            }
-          }
+          await applyPendingAdjustment(barcode, { baseline, netBaseDelta, productId, name });
         })();
       }, 200);
 
@@ -198,11 +246,16 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
         name,
       });
     },
-    [cart, isOnline],
+    [cart, applyPendingAdjustment],
   );
 
   const removeItem = useCallback(
     async (barcode: string) => {
+      // Settle any in-flight quantity-adjustment timer for this (or any)
+      // barcode first, so the DB is caught up with what the cart currently
+      // displays before we compute how much stock to restore.
+      await flushPendingQuantityTimers();
+
       const item = findCartItemByBarcode(cart.items, barcode);
       if (!item) return;
 
@@ -216,10 +269,14 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
       await incrementStock(supabase, item.productId, toBaseUnits(item.quantity, item.unitConversionFactor));
       cart.removeItem(barcode);
     },
-    [cart, isOnline],
+    [cart, isOnline, flushPendingQuantityTimers],
   );
 
   const clear = useCallback(async () => {
+    // Same reasoning as removeItem above — flush before reading cart.items
+    // so every item's displayed quantity already matches what's in the DB.
+    await flushPendingQuantityTimers();
+
     if (!isOnline) {
       await Promise.all(
         cart.items.map((item) =>
@@ -235,7 +292,7 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
       cart.items.map((item) => incrementStock(supabase, item.productId, toBaseUnits(item.quantity, item.unitConversionFactor))),
     );
     cart.clear();
-  }, [cart, isOnline]);
+  }, [cart, isOnline, flushPendingQuantityTimers]);
 
   const checkout = useCallback(
     async (options: {
@@ -257,6 +314,11 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
       if (!storeId) {
         throw new Error("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
       }
+
+      // Settle any in-flight quantity-adjustment timer before recording the
+      // sale — otherwise it would fire ~200ms after cart.clear() below,
+      // applying a stock delta "orphaned" from this now-completed sale.
+      await flushPendingQuantityTimers();
 
       setIsCheckingOut(true);
       try {
@@ -350,7 +412,7 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
         setIsCheckingOut(false);
       }
     },
-    [cart, cashierId, isOnline, storeId],
+    [cart, cashierId, isOnline, storeId, flushPendingQuantityTimers],
   );
 
   const dismissReceipt = useCallback(() => setLastReceipt(null), []);
@@ -360,6 +422,11 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
       if (!storeId) {
         throw new Error("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
       }
+
+      // Same reasoning as in checkout above — settle pending timers before
+      // holding the sale so none of them fire against an already-cleared
+      // cart afterward.
+      await flushPendingQuantityTimers();
 
       if (!isOnline) {
         await addPendingHeldSale({
@@ -389,7 +456,7 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
       );
       cart.clear();
     },
-    [cart, cashierId, isOnline, storeId],
+    [cart, cashierId, isOnline, storeId, flushPendingQuantityTimers],
   );
 
   const resumeSale = useCallback(

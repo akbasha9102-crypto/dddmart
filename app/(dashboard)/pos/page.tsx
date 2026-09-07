@@ -118,18 +118,25 @@ export default function POSPage() {
   }
 
   async function handleConfirmPayment() {
-    if (paymentMethod === "credit") {
-      if (!selectedCustomer) return;
-      await checkout({
-        paidAmount: 0,
-        paymentMethod: "credit",
-        customerId: selectedCustomer.id,
-        customerName: selectedCustomer.name,
-      });
-    } else {
-      await checkout({ paidAmount: Number(paidAmount) || 0, paymentMethod: "cash" });
+    try {
+      if (paymentMethod === "credit") {
+        if (!selectedCustomer) return;
+        await checkout({
+          paidAmount: 0,
+          paymentMethod: "credit",
+          customerId: selectedCustomer.id,
+          customerName: selectedCustomer.name,
+        });
+      } else {
+        await checkout({ paidAmount: Number(paidAmount) || 0, paymentMethod: "cash" });
+      }
+      setIsCheckoutOpen(false);
+    } catch (err) {
+      // Keep the payment modal open on failure — the cashier needs to see
+      // the error in context and can retry immediately without re-entering
+      // payment details (amount tendered / selected customer are preserved).
+      setToastMessage(err instanceof Error ? err.message : "حدث خطأ أثناء إتمام عملية الدفع");
     }
-    setIsCheckoutOpen(false);
   }
 
   const paidNumber = Number(paidAmount) || 0;
