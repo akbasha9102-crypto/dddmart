@@ -30,7 +30,7 @@ const CameraBarcodeScanner = dynamic(
  * quantity picker (modal) for items without a readable barcode.
  */
 export function BarcodeScanner() {
-  const { scanBarcode, scanError, addProductToCart } = usePOSContext();
+  const { scanBarcode, scanError, addProductToCart, shift } = usePOSContext();
   const { isOnline } = useOfflineContext();
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -48,7 +48,7 @@ export function BarcodeScanner() {
     [scanBarcode],
   );
 
-  useBarcodeScanner({ onScan: handleHidScan });
+  useBarcodeScanner({ onScan: handleHidScan, enabled: Boolean(shift) });
 
   useEffect(() => {
     async function loadData() {

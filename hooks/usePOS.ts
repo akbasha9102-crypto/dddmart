@@ -13,6 +13,7 @@ import type { CompletedSale } from "@/types/pos";
 import type { Product } from "@/types/product";
 import type { ProductUnit } from "@/types/product";
 import type { PaymentMethod } from "@/types/database.types";
+import type { Shift } from "@/types/shifts";
 import { toBaseUnits } from "@/lib/units";
 import { generateInvoiceNumber } from "@/lib/utils";
 import { addPendingHeldSale, addPendingSale, getPendingHeldSales, removePendingHeldSale } from "@/lib/offline/outbox";
@@ -21,9 +22,10 @@ import { applyLocalStockDelta, getCachedCatalog, getCachedUnitsList, resolveBarc
 interface UsePOSOptions {
   cashierId: string | null;
   storeId: string | null;
+  shift: Shift | null;
 }
 
-export function usePOS({ cashierId, storeId }: UsePOSOptions) {
+export function usePOS({ cashierId, storeId, shift }: UsePOSOptions) {
   const cart = useCart();
   const { isOnline } = useOnlineStatus();
   const [isScanning, setIsScanning] = useState(false);
@@ -34,6 +36,10 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
   const addProductToCart = useCallback(
     async (product: Product, quantity: number, unit?: ProductUnit) => {
       setScanError(null);
+      if (!shift) {
+        setScanError("افتح وردية أولاً قبل البيع");
+        return;
+      }
       const baseUnits = toBaseUnits(quantity, unit?.conversion_factor);
 
       if (!isOnline) {
@@ -63,7 +69,7 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
       cart.addItem(unit ? productUnitToCartItem(updated, unit, quantity) : productToCartItem(updated, quantity));
       playScanBeep();
     },
-    [cart, isOnline],
+    [cart, isOnline, shift],
   );
 
   const scanBarcode = useCallback(
@@ -303,6 +309,10 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
     }): Promise<CompletedSale> => {
       const { paidAmount, paymentMethod = "cash", customerId = null, customerName } = options;
 
+      if (!shift) {
+        throw new Error("افتح وردية أولاً قبل البيع");
+      }
+
       // A credit sale needs a live customer-balance read for the over-limit
       // warning, which is impossible offline (no customer cache like
       // lib/offline/productCache.ts) — simply disallowed while offline. The
@@ -412,13 +422,17 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
         setIsCheckingOut(false);
       }
     },
-    [cart, cashierId, isOnline, storeId, flushPendingQuantityTimers],
+    [cart, cashierId, isOnline, storeId, flushPendingQuantityTimers, shift],
   );
 
   const dismissReceipt = useCallback(() => setLastReceipt(null), []);
 
   const holdCurrentSale = useCallback(
     async (note: string | null) => {
+      if (!shift) {
+        throw new Error("افتح وردية أولاً قبل البيع");
+      }
+
       if (!storeId) {
         throw new Error("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
       }
@@ -456,7 +470,7 @@ export function usePOS({ cashierId, storeId }: UsePOSOptions) {
       );
       cart.clear();
     },
-    [cart, cashierId, isOnline, storeId, flushPendingQuantityTimers],
+    [cart, cashierId, isOnline, storeId, flushPendingQuantityTimers, shift],
   );
 
   const resumeSale = useCallback(

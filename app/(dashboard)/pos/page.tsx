@@ -6,7 +6,6 @@ import { Volume2, VolumeX } from "lucide-react";
 import { usePOSContext } from "@/context/POSContext";
 import { useAuth } from "@/context/AuthContext";
 import { useSoundSettings } from "@/hooks/useSoundSettings";
-import { useShift } from "@/hooks/useShift";
 import { BarcodeScanner } from "@/components/features/pos/BarcodeScanner";
 import { CartGrid } from "@/components/features/pos/CartGrid";
 import { ReceiptPrinter } from "@/components/features/pos/ReceiptPrinter";
@@ -53,6 +52,12 @@ export default function POSPage() {
     dismissReceipt,
     holdCurrentSale,
     isOnline,
+    shift,
+    isShiftLoading,
+    isShiftSubmitting,
+    shiftError,
+    openShift,
+    closeShift,
   } = usePOSContext();
 
   const [activeView, setActiveView] = useState<POSView>("cashier");
@@ -69,11 +74,7 @@ export default function POSPage() {
   const { isMuted, toggle: toggleMuted } = useSoundSettings();
   const router = useRouter();
 
-  const { user, storeId, isLoading: isAuthLoading } = useAuth();
-  const { shift, isLoading: isShiftLoading, isSubmitting: isShiftSubmitting, error: shiftError, open: openShiftAction, close: closeShiftAction } = useShift({
-    cashierId: user?.id ?? null,
-    storeId,
-  });
+  const { isLoading: isAuthLoading } = useAuth();
   const [isCloseShiftOpen, setIsCloseShiftOpen] = useState(false);
 
   useEffect(() => {
@@ -84,9 +85,13 @@ export default function POSPage() {
   async function handleHoldClick() {
     if (items.length === 0) return;
     const holdLabel = `معلقة ${formatTime(new Date())} - ${formatCurrency(totals.totalAmount)}`;
-    await holdCurrentSale(holdLabel);
-    setHeldCount((count) => count + 1);
-    setToastMessage("تم تعليق الفاتورة بنجاح");
+    try {
+      await holdCurrentSale(holdLabel);
+      setHeldCount((count) => count + 1);
+      setToastMessage("تم تعليق الفاتورة بنجاح");
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : "حدث خطأ أثناء تعليق الفاتورة");
+    }
   }
 
   function openCheckout() {
@@ -342,7 +347,7 @@ export default function POSPage() {
 
       {toastMessage ? <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} /> : null}
 
-      <ShiftGate shift={shift} isLoading={isAuthLoading || isShiftLoading} isSubmitting={isShiftSubmitting} error={shiftError} onOpen={openShiftAction} />
+      <ShiftGate shift={shift} isLoading={isAuthLoading || isShiftLoading} isSubmitting={isShiftSubmitting} error={shiftError} onOpen={openShift} />
 
       {shift ? (
         <CloseShiftModal
@@ -352,7 +357,7 @@ export default function POSPage() {
           error={shiftError}
           onClose={() => setIsCloseShiftOpen(false)}
           onConfirm={async (counted) => {
-            const succeeded = await closeShiftAction(counted);
+            const succeeded = await closeShift(counted);
             setIsCloseShiftOpen(false);
             if (!succeeded) return;
             const supabase = createClient();
