@@ -38,11 +38,17 @@ export interface RecordReturnParams {
 }
 
 /**
- * Records a return: validates against over-returning a sale line, inserts
- * the returns row, then restores stock (skipped if the product was
- * deleted — the return row is still kept for the refund/audit trail).
- * Insert-before-increment is deliberate: if incrementStock fails/no-ops,
- * the return is still recorded rather than silently lost.
+ * Records a return via the record_return RPC (see
+ * supabase/migrations/00000000000021_atomic_return_recording.sql), then
+ * restores stock (skipped if the product was deleted — the return row is
+ * still kept for the refund/audit trail). All validation (over-return
+ * quantity check, refund-amount-vs-original-sale-price cap, tenant
+ * check) happens atomically inside the RPC now — this function no longer
+ * does its own select+insert, which is what made the old implementation
+ * vulnerable to a double-count race (audit 2.3) and an inflated-refund
+ * exploit (audit 2.2). RPC-before-increment is deliberate: if
+ * incrementStock fails/no-ops, the return is still recorded rather than
+ * silently lost.
  */
 export async function recordReturn(
   supabase: Client,
@@ -50,39 +56,24 @@ export async function recordReturn(
   actorId: string | null,
   storeId: string,
 ): Promise<Return> {
-  const { data: existingReturns, error: existingError } = await supabase
-    .from("returns")
-    .select("quantity")
-    .eq("sale_item_id", params.saleItemId);
+  const { data, error } = await supabase.rpc("record_return", {
+    p_sale_id: params.saleId,
+    p_sale_item_id: params.saleItemId,
+    p_product_id: params.productId,
+    p_product_name: params.productName,
+    p_quantity: params.quantity,
+    p_unit_label: params.unitLabel,
+    p_unit_conversion_factor: params.unitConversionFactor,
+    p_refund_amount: params.refundAmount,
+    p_reason: params.reason,
+    p_actor_id: actorId,
+    p_store_id: storeId,
+  });
 
-  if (existingError) throw existingError;
+  if (error) throw error;
 
-  const alreadyReturned = (existingReturns ?? []).reduce((sum, row) => sum + row.quantity, 0);
-  if (alreadyReturned + params.quantity > params.originalLineQuantity) {
-    throw new Error(
-      `الكمية المطلوب إرجاعها أكبر من المتبقي القابل للإرجاع (المتبقي: ${params.originalLineQuantity - alreadyReturned})`,
-    );
-  }
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("returns")
-    .insert({
-      sale_id: params.saleId,
-      sale_item_id: params.saleItemId,
-      product_id: params.productId,
-      product_name: params.productName,
-      quantity: params.quantity,
-      unit_label: params.unitLabel,
-      unit_conversion_factor: params.unitConversionFactor,
-      refund_amount: params.refundAmount,
-      reason: params.reason,
-      actor_id: actorId,
-      store_id: storeId,
-    })
-    .select()
-    .single();
-
-  if (insertError) throw insertError;
+  const inserted = data?.[0];
+  if (!inserted) throw new Error("تعذر تسجيل الإرجاع");
 
   if (params.productId) {
     await incrementStock(supabase, params.productId, toBaseUnits(params.quantity, params.unitConversionFactor));

@@ -38,40 +38,34 @@ const RESTORED_PRODUCT: Product = {
 };
 
 /**
- * Hand-rolled fake covering the exact chains recordReturn/getReturnedQuantitiesForSale
- * call: returns.select().eq() (existing-returns check + getReturnedQuantitiesForSale),
- * returns.insert().select().single(), rpc() (incrementStock), and
- * operations_log.insert() (logOperation). Deliberately minimal, matching the
- * other fakes in this repo (see products.service.test.ts).
+ * Hand-rolled fake covering the exact calls recordReturn/
+ * getReturnedQuantitiesForSale make post-migration-21: recordReturn now
+ * calls two different RPCs in sequence (record_return, then
+ * adjust_product_stock via incrementStock) and never touches
+ * `.from("returns")` directly at all — only getReturnedQuantitiesForSale
+ * still does, via .select().eq(), which is untouched here. `.rpc(name,
+ * args)` dispatches by name so both RPCs can be mocked independently per
+ * test. Deliberately minimal, matching the other fakes in this repo (see
+ * products.service.test.ts).
  */
 function createFakeSupabase(options: {
-  existingReturns: { sale_item_id: string; quantity: number }[];
-  insertedReturn: Return;
-  rpcData: Product[] | null;
+  recordReturnResult: { data: Return[] | null; error: { message: string } | null };
+  adjustStockData?: Product[] | null;
 }): {
   supabase: SupabaseClient<Database>;
-  insertSpy: ReturnType<typeof vi.fn>;
   rpcSpy: ReturnType<typeof vi.fn>;
   logInsertSpy: ReturnType<typeof vi.fn>;
 } {
-  const insertSpy = vi.fn(() => ({
-    select: () => ({
-      single: async () => ({ data: options.insertedReturn, error: null }),
-    }),
-  }));
-  const rpcSpy = vi.fn(async () => ({ data: options.rpcData, error: null }));
   const logInsertSpy = vi.fn(async () => ({ data: null, error: null }));
+
+  const rpcSpy = vi.fn(async (name: string) => {
+    if (name === "record_return") return options.recordReturnResult;
+    if (name === "adjust_product_stock") return { data: options.adjustStockData ?? [RESTORED_PRODUCT], error: null };
+    throw new Error(`unexpected rpc ${name}`);
+  });
 
   const supabase = {
     from: (table: string) => {
-      if (table === "returns") {
-        return {
-          select: () => ({
-            eq: async () => ({ data: options.existingReturns, error: null }),
-          }),
-          insert: insertSpy,
-        };
-      }
       if (table === "operations_log") {
         return { insert: logInsertSpy };
       }
@@ -80,7 +74,7 @@ function createFakeSupabase(options: {
     rpc: rpcSpy,
   } as unknown as SupabaseClient<Database>;
 
-  return { supabase, insertSpy, rpcSpy, logInsertSpy };
+  return { supabase, rpcSpy, logInsertSpy };
 }
 
 const BASE_PARAMS = {
@@ -97,52 +91,91 @@ const BASE_PARAMS = {
 };
 
 describe("recordReturn", () => {
-  it("throws a friendly Arabic error when the requested quantity would over-return the line", async () => {
-    const { supabase } = createFakeSupabase({
-      existingReturns: [{ sale_item_id: "item-1", quantity: 4 }],
-      insertedReturn: INSERTED_RETURN,
-      rpcData: [RESTORED_PRODUCT],
-    });
-
-    await expect(
-      recordReturn(supabase, { ...BASE_PARAMS, quantity: 2 }, "user-1", "store-1"),
-    ).rejects.toThrow("المتبقي: 1");
-  });
-
-  it("calls incrementStock with the base-unit-converted quantity for a unit sale", async () => {
+  it("calls the record_return RPC with the correct args, then adjust_product_stock with the base-unit-converted delta", async () => {
     const { supabase, rpcSpy } = createFakeSupabase({
-      existingReturns: [],
-      insertedReturn: INSERTED_RETURN,
-      rpcData: [RESTORED_PRODUCT],
+      recordReturnResult: { data: [INSERTED_RETURN], error: null },
     });
 
-    await recordReturn(
+    const result = await recordReturn(
       supabase,
       { ...BASE_PARAMS, quantity: 1, unitLabel: "كارتون", unitConversionFactor: 24 },
       "user-1",
       "store-1",
     );
 
+    expect(rpcSpy).toHaveBeenCalledWith("record_return", {
+      p_sale_id: "sale-1",
+      p_sale_item_id: "item-1",
+      p_product_id: "product-1",
+      p_product_name: "علبة علك",
+      p_quantity: 1,
+      p_unit_label: "كارتون",
+      p_unit_conversion_factor: 24,
+      p_refund_amount: 4,
+      p_reason: "تالف",
+      p_actor_id: "user-1",
+      p_store_id: "store-1",
+    });
     expect(rpcSpy).toHaveBeenCalledWith("adjust_product_stock", {
       p_product_id: "product-1",
       p_delta: 24,
     });
+    expect(result).toEqual(INSERTED_RETURN);
+  });
+
+  it("throws the RPC's Arabic over-quantity error and never touches stock (rejected return must not mutate stock)", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase({
+      recordReturnResult: {
+        data: null,
+        error: { message: "الكمية المطلوب إرجاعها أكبر من المتبقي القابل للإرجاع (المتبقي: 1)" },
+      },
+    });
+
+    await expect(recordReturn(supabase, { ...BASE_PARAMS, quantity: 2 }, "user-1", "store-1")).rejects.toThrow(
+      "الكمية المطلوب إرجاعها أكبر من المتبقي القابل للإرجاع (المتبقي: 1)",
+    );
+
+    expect(rpcSpy).not.toHaveBeenCalledWith("adjust_product_stock", expect.anything());
+  });
+
+  it("throws the RPC's Arabic over-refund-amount error and never touches stock or logs (direct regression test for audit 2.2)", async () => {
+    const { supabase, rpcSpy, logInsertSpy } = createFakeSupabase({
+      recordReturnResult: {
+        data: null,
+        error: { message: "قيمة الاسترجاع (10) أكبر من الحد المسموح لهذه الكمية (4)" },
+      },
+    });
+
+    await expect(
+      recordReturn(supabase, { ...BASE_PARAMS, refundAmount: 10 }, "user-1", "store-1"),
+    ).rejects.toThrow("قيمة الاسترجاع (10) أكبر من الحد المسموح لهذه الكمية (4)");
+
+    expect(rpcSpy).not.toHaveBeenCalledWith("adjust_product_stock", expect.anything());
+    expect(logInsertSpy).not.toHaveBeenCalled();
   });
 
   it("still inserts the return and logs, but skips incrementStock, when productId is null", async () => {
-    const { supabase, rpcSpy, insertSpy, logInsertSpy } = createFakeSupabase({
-      existingReturns: [],
-      insertedReturn: { ...INSERTED_RETURN, product_id: null },
-      rpcData: [RESTORED_PRODUCT],
+    const { supabase, rpcSpy, logInsertSpy } = createFakeSupabase({
+      recordReturnResult: { data: [{ ...INSERTED_RETURN, product_id: null }], error: null },
     });
 
     const result = await recordReturn(supabase, { ...BASE_PARAMS, productId: null }, "user-1", "store-1");
 
-    expect(insertSpy).toHaveBeenCalled();
-    expect(rpcSpy).not.toHaveBeenCalled();
+    expect(rpcSpy).toHaveBeenCalledWith("record_return", expect.objectContaining({ p_product_id: null }));
+    expect(rpcSpy).not.toHaveBeenCalledWith("adjust_product_stock", expect.anything());
     expect(logInsertSpy).toHaveBeenCalledWith(expect.objectContaining({ action_type: "return_created" }));
     expect(result).toEqual({ ...INSERTED_RETURN, product_id: null });
   });
+
+  // Note on 2.3 (the double-return race): Vitest against a mocked Supabase
+  // client cannot exercise real Postgres row-locking — there is no actual
+  // concurrent transaction here, just sequential mock calls. The tests
+  // above confirm recordReturn wires the RPC call and error surfacing
+  // correctly, but the concurrency-safety guarantee itself (the `select
+  // ... for update` lock on sale_items) is verified at the SQL level by
+  // the migration, not by a fabricated "two calls at once" unit test that
+  // would not actually prove atomicity. See
+  // supabase/migrations/00000000000021_atomic_return_recording.sql.
 });
 
 describe("getReturnedQuantitiesForSale", () => {

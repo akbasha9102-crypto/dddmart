@@ -1021,6 +1021,22 @@ export interface Database {
         Args: { p_product_id: string; p_added_base_units: number; p_unit_base_cost: number };
         Returns: Database["public"]["Tables"]["products"]["Row"][];
       };
+      record_return: {
+        Args: {
+          p_sale_id: string;
+          p_sale_item_id: string;
+          p_product_id: string | null;
+          p_product_name: string;
+          p_quantity: number;
+          p_unit_label: string | null;
+          p_unit_conversion_factor: number;
+          p_refund_amount: number;
+          p_reason: string | null;
+          p_actor_id: string | null;
+          p_store_id: string;
+        };
+        Returns: Database["public"]["Tables"]["returns"]["Row"][];
+      };
     };
     Enums: Record<string, never>;
   };

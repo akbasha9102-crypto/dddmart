@@ -148,6 +148,10 @@ function ReturnLineRow({
       setError("قيمة الاسترجاع يجب أن تكون صفراً أو أكبر");
       return;
     }
+    if (refundNumber > defaultRefund) {
+      setError(`قيمة الاسترجاع أكبر من الحد المسموح لهذه الكمية (الحد الأقصى: ${defaultRefund})`);
+      return;
+    }
     if (!storeId) {
       setError("تعذر تحديد المتجر — الرجاء إعادة تسجيل الدخول");
       return;
@@ -224,6 +228,7 @@ function ReturnLineRow({
             label="قيمة الاسترجاع"
             type="number"
             min={0}
+            max={defaultRefund}
             step="0.01"
             value={refundAmount}
             onChange={(event) => {
