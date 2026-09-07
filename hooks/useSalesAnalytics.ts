@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { endOfDay, startOfDay } from "@/lib/dateRange";
 import { getCashierRanking, getCategoryRanking, getProductRanking, getSalesTrend } from "@/services/sales.service";
 import type { CashierRankingStat, CategoryRankingStat, DailySalesPoint, ProductRankingStat } from "@/services/sales.service";
 import type { PresetDays, CustomRange } from "@/components/features/sales/RangeDatePicker";
 
 export type AnalyticsRange = { kind: "preset"; days: PresetDays } | { kind: "custom"; startDate: Date; endDate: Date };
 
-function resolveRange(range: AnalyticsRange): { startDate: Date; endDate: Date } {
-  if (range.kind === "custom") return { startDate: range.startDate, endDate: range.endDate };
+export function resolveRange(range: AnalyticsRange): { startDate: Date; endDate: Date } {
+  if (range.kind === "custom") return { startDate: startOfDay(range.startDate), endDate: endOfDay(range.endDate) };
 
   const endDate = new Date();
   endDate.setHours(23, 59, 59, 999);

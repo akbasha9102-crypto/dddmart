@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getSalesForExport } from "@/services/sales.service";
 import type { SalesExportRow } from "@/services/sales.service";
 import { formatDateTime } from "@/lib/utils";
+import { endOfDay, startOfDay } from "@/lib/dateRange";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
@@ -33,11 +34,10 @@ function rangeForPreset(days: PresetDays): CustomRange {
 }
 
 export function toExportRange(range: CustomRange): { startDate: Date; endDate: Date } {
-  const startDate = new Date(range.startDate);
-  startDate.setHours(0, 0, 0, 0);
-  const endDate = new Date(range.endDate);
-  endDate.setHours(23, 59, 59, 999);
-  return { startDate, endDate };
+  return {
+    startDate: startOfDay(new Date(range.startDate)),
+    endDate: endOfDay(new Date(range.endDate)),
+  };
 }
 
 function toSheetRow(row: SalesExportRow) {

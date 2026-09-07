@@ -8,6 +8,7 @@ import type { OperationEntityType } from "@/types/database.types";
 import { ArchiveList } from "@/components/features/archive/ArchiveList";
 import { cn } from "@/lib/utils";
 import { BackToSettingsLink } from "@/components/shared/BackToSettingsLink";
+import { endOfDay, startOfDay } from "@/lib/dateRange";
 
 type RangeOption = "today" | "7" | "30" | "all" | "custom";
 
@@ -35,27 +36,21 @@ const ENTITY_OPTIONS: { value: OperationEntityType | "all"; label: string }[] = 
 function rangeToStartDate(range: RangeOption): Date | undefined {
   if (range === "all") return undefined;
 
-  const startDate = new Date();
   if (range === "today") {
-    startDate.setHours(0, 0, 0, 0);
-    return startDate;
+    return startOfDay(new Date());
   }
 
   const days = range === "7" ? 7 : 30;
+  const startDate = new Date();
   startDate.setDate(startDate.getDate() - (days - 1));
-  startDate.setHours(0, 0, 0, 0);
-  return startDate;
+  return startOfDay(startDate);
 }
 
-// Mirrors toExportRange in components/features/sales/SalesExportModal.tsx (not imported to avoid
-// a cross-feature type/util dependency beyond the precedented RangeDatePicker component reuse) —
-// extends the end date to end-of-day so a same-day range doesn't collapse to a zero-width query window.
 function toArchiveQueryRange(customRange: CustomArchiveRange): { startDate: Date; endDate: Date } {
-  const startDate = new Date(customRange.startDate);
-  startDate.setHours(0, 0, 0, 0);
-  const endDate = new Date(customRange.endDate);
-  endDate.setHours(23, 59, 59, 999);
-  return { startDate, endDate };
+  return {
+    startDate: startOfDay(new Date(customRange.startDate)),
+    endDate: endOfDay(new Date(customRange.endDate)),
+  };
 }
 
 export default function ArchivePage() {
