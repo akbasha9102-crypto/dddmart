@@ -1049,6 +1049,14 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["sales"]["Row"][];
       };
+      close_shift_atomic: {
+        Args: {
+          p_shift_id: string;
+          p_counted_amount: number | null;
+          p_is_forced: boolean;
+        };
+        Returns: Database["public"]["Tables"]["shifts"]["Row"][];
+      };
     };
     Enums: Record<string, never>;
   };
