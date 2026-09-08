@@ -1052,6 +1052,15 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["returns"]["Row"][];
       };
+      record_reconciliation: {
+        Args: {
+          p_product_id: string;
+          p_product_name: string;
+          p_counted_quantity: number;
+          p_reason: string | null;
+        };
+        Returns: Database["public"]["Tables"]["stock_reconciliations"]["Row"][];
+      };
       create_sale_atomic: {
         Args: {
           p_items: { product_id: string; unit_name: string | null; quantity: number }[];

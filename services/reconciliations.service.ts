@@ -13,14 +13,20 @@ export interface RecordReconciliationParams {
 }
 
 /**
- * Corrects a product's stock to match a physical count. Re-fetches the
- * product's quantity/cost_price/unit fresh (not trusting a value the UI
- * opened with — stock can move between opening the form and submitting),
- * computes difference = countedQuantity - freshQuantity, and applies it
- * atomically via adjust_product_stock (which supports both directions,
- * unlike decrementStock). loss_value is only positive for a shortage
- * (difference < 0); an overage corrects the quantity but is never valued
- * as profit.
+ * Corrects a product's stock to match a physical count, atomically via the
+ * record_reconciliation RPC (security definer). The RPC row-locks the
+ * product, derives previous_quantity/cost_price/unit from that locked read
+ * (not a value this function read earlier), computes
+ * difference = countedQuantity - lockedQuantity, and sets quantity
+ * directly to countedQuantity — all inside one lock, so a concurrent
+ * sale/return between "open the form" and "submit" cannot make the final
+ * quantity diverge from what was physically counted (closes a TOCTOU race
+ * the old two-step read-then-adjust_product_stock version had). actor_id/
+ * store_id are derived server-side from auth.uid()/current_store_id()
+ * inside the RPC, not sent as arguments. loss_value is only positive for a
+ * shortage (difference < 0); an overage corrects the quantity but is never
+ * valued as profit. See
+ * supabase/migrations/00000000000036_atomic_stock_reconciliation.sql.
  */
 export async function recordReconciliation(
   supabase: Client,
@@ -28,58 +34,26 @@ export async function recordReconciliation(
   actorId: string | null,
   storeId: string,
 ): Promise<StockReconciliation> {
-  const { data: product, error: productError } = await supabase
-    .from("products")
-    .select("quantity, cost_price, unit")
-    .eq("id", params.productId)
-    .maybeSingle();
-  if (productError) throw productError;
-  if (!product) throw new Error("تعذر العثور على المنتج");
-
-  const previousQuantity = product.quantity;
-  const difference = params.countedQuantity - previousQuantity;
-  if (difference === 0) {
-    throw new Error("لا يوجد فرق لتسجيله");
-  }
-
-  const { data: rpcData, error: rpcError } = await supabase.rpc("adjust_product_stock", {
+  const { data, error } = await supabase.rpc("record_reconciliation", {
     p_product_id: params.productId,
-    p_delta: difference,
+    p_product_name: params.productName,
+    p_counted_quantity: params.countedQuantity,
+    p_reason: params.reason,
   });
-  if (rpcError) throw rpcError;
-  const updated = rpcData?.[0] ?? null;
-  if (!updated) {
-    throw new Error("تعذر تحديث المخزون — حاول مرة أخرى");
+  if (error) throw error;
+  const inserted = data?.[0];
+  if (!inserted) {
+    throw new Error("تعذر تسجيل التسوية — حاول مرة أخرى");
   }
 
-  const lossValue = difference < 0 ? Math.abs(difference) * product.cost_price : 0;
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("stock_reconciliations")
-    .insert({
-      product_id: params.productId,
-      product_name: params.productName,
-      unit: product.unit,
-      previous_quantity: previousQuantity,
-      counted_quantity: params.countedQuantity,
-      difference,
-      cost_price: product.cost_price,
-      loss_value: lossValue,
-      reason: params.reason,
-      actor_id: actorId,
-      store_id: storeId,
-    })
-    .select()
-    .single();
-  if (insertError) throw insertError;
-
-  const directionLabel = difference < 0 ? `نقص ${Math.abs(difference)}` : `زيادة ${difference}`;
+  const directionLabel =
+    inserted.difference < 0 ? `نقص ${Math.abs(inserted.difference)}` : `زيادة ${inserted.difference}`;
   await logOperation(supabase, {
     userId: actorId,
     actionType: "stock_reconciled",
     entityType: "stock",
     entityId: params.productId,
-    description: `تمت تسوية "${params.productName}": من ${previousQuantity} إلى ${params.countedQuantity} (${directionLabel})${
+    description: `تمت تسوية "${params.productName}": من ${inserted.previous_quantity} إلى ${inserted.counted_quantity} (${directionLabel})${
       params.reason ? ` — السبب: ${params.reason}` : ""
     }`,
     storeId,
