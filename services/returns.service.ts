@@ -66,8 +66,6 @@ export async function recordReturn(
     p_unit_conversion_factor: params.unitConversionFactor,
     p_refund_amount: params.refundAmount,
     p_reason: params.reason,
-    p_actor_id: actorId,
-    p_store_id: storeId,
   });
 
   if (error) throw error;

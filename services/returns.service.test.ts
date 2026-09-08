@@ -113,8 +113,6 @@ describe("recordReturn", () => {
       p_unit_conversion_factor: 24,
       p_refund_amount: 4,
       p_reason: "تالف",
-      p_actor_id: "user-1",
-      p_store_id: "store-1",
     });
     expect(rpcSpy).toHaveBeenCalledWith("adjust_product_stock", {
       p_product_id: "product-1",

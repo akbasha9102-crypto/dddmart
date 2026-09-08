@@ -1049,8 +1049,6 @@ export interface Database {
           p_unit_conversion_factor: number;
           p_refund_amount: number;
           p_reason: string | null;
-          p_actor_id: string | null;
-          p_store_id: string;
         };
         Returns: Database["public"]["Tables"]["returns"]["Row"][];
       };
