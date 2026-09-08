@@ -1,0 +1,78 @@
+-- Close the cashier-self-promotion-to-admin hole — fixes audit item 1
+-- (mashee_mart_security_audit.md, "أي كاشير يقدر يرفّع نفسه إلى أدمن
+-- بنفسه", both the "مفتش قواعد البيانات" and "مدقق الهويات" findings).
+--
+-- The vulnerability: the "self update profile" policy (originally
+-- 00000000000000_init.sql:76, rewritten in
+-- 00000000000012_multi_tenancy_foundation.sql:187-190, never touched
+-- since) is:
+--   create policy "self update profile" on profiles for update to authenticated
+--     using (auth.uid() = id)
+--     with check (auth.uid() = id and store_id = current_store_id());
+-- It pins which row can be touched (own row only) and pins store_id (no
+-- cross-store hop), but places no restriction on which *columns* change —
+-- specifically role and is_active. Any authenticated cashier can call the
+-- Supabase REST API directly (bypassing the app's UI/JS entirely):
+--   PATCH /rest/v1/profiles?id=eq.<own-uuid>  body: {"role":"admin"}
+-- and it succeeds under current RLS, permanently self-promoting to admin
+-- for their store.
+--
+-- Fix: grepped the whole app (services/, hooks/, context/, app/,
+-- components/) for every `.from("profiles")` call. There is exactly one
+-- `.update(...)` against profiles anywhere in the codebase
+-- (app/api/employees/[id]/route.ts:134), and it already runs through
+-- createAdminClient() (lib/supabase/admin.ts, service-role key) — which
+-- bypasses RLS and table/column-level GRANTs entirely — behind
+-- requireAdmin() (admin-only, checked server-side against the caller's own
+-- profiles.role). No other code path anywhere self-updates a profiles row
+-- under the authenticated role. There is no "edit my own name" feature
+-- today, so there is no safe column to carve out for self-service update.
+--
+-- Rather than trying to patch the existing policy's `with check` clause
+-- (e.g. comparing role/is_active against their pre-update stored values
+-- via a subquery), this drops self-UPDATE access to profiles entirely:
+--   1. Column-level privilege revocation (same tool already used for
+--      stores in 00000000000015_store_contact_info.sql:27, there scoped
+--      to name/phone/address) — a single, simple, ACL-layer fact ("the
+--      authenticated role has zero UPDATE column privileges on
+--      profiles") that fails the request before RLS's `with check` is
+--      even evaluated, rather than a stateful subquery predicate whose
+--      correctness depends on snapshot-isolation reasoning.
+--   2. Dropping the RLS policy itself (not just neutering it via GRANT)
+--      so nothing misleading is left behind for a future reader, and so a
+--      future re-grant of UPDATE privilege on profiles (e.g. to finally
+--      build "edit my own name") doesn't silently reopen this exact
+--      vulnerability with no compensating RLS control.
+--
+-- If "edit my own display name" is ever built, add a narrowly-scoped
+-- `grant update (full_name) on profiles to authenticated` plus a fresh,
+-- purpose-built policy at that time, in its own migration next to that
+-- feature's code — not preemptively here (YAGNI).
+--
+-- No application code changes required: the only .update() call against
+-- profiles already goes through the service-role client, which is
+-- unaffected by either change below.
+
+-- ============================================================================
+-- Drop the over-permissive self-update policy entirely. Read access
+-- ("authenticated read profiles", store-scoped) is untouched — only the
+-- self-UPDATE path is removed. Admin-driven employee updates continue to
+-- work unaffected: they run through app/api/employees/[id]/route.ts's
+-- service-role client, which bypasses RLS by design.
+-- ============================================================================
+
+drop policy if exists "self update profile" on profiles;
+
+-- ============================================================================
+-- Column-level privilege revocation: belt-and-suspenders even after
+-- dropping the policy above. With zero UPDATE policies left on profiles
+-- for the authenticated role, RLS itself already blocks every UPDATE
+-- attempt by an ordinary session — this additionally ensures that even if
+-- some future policy is added back for another purpose (e.g. scoped only
+-- to full_name), a caller still can't slip role/is_active/store_id/id/
+-- created_at into the same UPDATE statement's column list, because
+-- Postgres checks column-level UPDATE privilege independently of, and
+-- before, RLS's row-level checks.
+-- ============================================================================
+
+revoke update on profiles from authenticated;
