@@ -1,54 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildSaleItemRows, createSale } from "./sales.service";
+import { createSale } from "./sales.service";
 import type { CartItem, CheckoutPayload } from "@/types/pos";
 import type { Database } from "@/types/database.types";
 import type { Sale, SaleItem } from "@/types/pos";
-
-describe("buildSaleItemRows", () => {
-  it("defaults unit_label to null and unit_conversion_factor to 1 for a base-unit sale", () => {
-    const items: CartItem[] = [
-      { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 10, costPrice: 1, quantity: 2, availableStock: 8 },
-    ];
-
-    expect(buildSaleItemRows("sale-1", items)).toEqual([
-      {
-        sale_id: "sale-1",
-        product_id: "p1",
-        product_name: "منتج",
-        barcode: "1111",
-        quantity: 2,
-        unit_price: 10,
-        total_price: 20,
-        unit_label: null,
-        unit_conversion_factor: 1,
-        cost_price: 1,
-      },
-    ]);
-  });
-
-  it("carries unitName/unitConversionFactor through for a unit sale", () => {
-    const items: CartItem[] = [
-      {
-        productId: "p1",
-        name: "منتج",
-        barcode: "2222",
-        unitPrice: 40,
-        costPrice: 24,
-        quantity: 1,
-        availableStock: 8,
-        unitName: "كارتون",
-        unitConversionFactor: 24,
-      },
-    ];
-
-    expect(buildSaleItemRows("sale-1", items)[0]).toMatchObject({
-      unit_label: "كارتون",
-      unit_conversion_factor: 24,
-      cost_price: 24,
-    });
-  });
-});
 
 const BASE_ITEMS: CartItem[] = [
   { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 100, costPrice: 60, quantity: 2, availableStock: 8 },
@@ -63,38 +18,35 @@ const BASE_PAYLOAD: CheckoutPayload = {
 
 /**
  * Hand-rolled fake router covering the exact chains createSale calls:
- * sales.insert().select().single(), sale_items.insert().select(),
- * customer_transactions.insert() (credit sales only), and
- * operations_log.insert() (logOperation) — same multi-table router shape as
- * returns.service.test.ts.
+ * rpc("create_sale_atomic", ...) (the ONLY write path now — see
+ * supabase/migrations/00000000000027_atomic_sale_recording.sql),
+ * sale_items.select().eq() (follow-up RLS-scoped fetch to assemble the
+ * receipt), and operations_log.insert() (logOperation) — same multi-table
+ * router shape as returns.service.test.ts.
  */
-function createFakeSupabase(insertedSale: Sale): {
+function createFakeSupabase(
+  insertedSale: Sale,
+  saleItems: SaleItem[] = [],
+): {
   supabase: SupabaseClient<Database>;
-  salesInsertSpy: ReturnType<typeof vi.fn>;
-  customerTransactionsInsertSpy: ReturnType<typeof vi.fn>;
+  rpcSpy: ReturnType<typeof vi.fn>;
 } {
-  const salesInsertSpy = vi.fn(() => ({
-    select: () => ({
-      single: async () => ({ data: insertedSale, error: null }),
-    }),
+  const rpcSpy = vi.fn(async () => ({ data: [insertedSale], error: null }));
+  const saleItemsSelectSpy = vi.fn(() => ({
+    eq: async () => ({ data: saleItems, error: null }),
   }));
-  const saleItemsInsertSpy = vi.fn(() => ({
-    select: async () => ({ data: [] as SaleItem[], error: null }),
-  }));
-  const customerTransactionsInsertSpy = vi.fn(async () => ({ data: null, error: null }));
   const logInsertSpy = vi.fn(async () => ({ data: null, error: null }));
 
   const supabase = {
+    rpc: rpcSpy,
     from: (table: string) => {
-      if (table === "sales") return { insert: salesInsertSpy };
-      if (table === "sale_items") return { insert: saleItemsInsertSpy };
-      if (table === "customer_transactions") return { insert: customerTransactionsInsertSpy };
+      if (table === "sale_items") return { select: saleItemsSelectSpy };
       if (table === "operations_log") return { insert: logInsertSpy };
       throw new Error(`unexpected table ${table}`);
     },
   } as unknown as SupabaseClient<Database>;
 
-  return { supabase, salesInsertSpy, customerTransactionsInsertSpy };
+  return { supabase, rpcSpy };
 }
 
 const CASH_SALE: Sale = {
@@ -129,56 +81,56 @@ describe("createSale — credit sale path", () => {
     ).rejects.toThrow("يجب اختيار زبون");
   });
 
-  it("forces paid_amount and change_amount to 0 on the inserted sales row for a credit sale", async () => {
-    const { supabase, salesInsertSpy } = createFakeSupabase(CREDIT_SALE);
+  it("calls the RPC with p_paid_amount/p_customer_id forced correctly for a credit sale", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase(CREDIT_SALE);
 
     await createSale(supabase, { ...BASE_PAYLOAD, paymentMethod: "credit", customerId: "customer-1" }, "store-1");
 
-    expect(salesInsertSpy).toHaveBeenCalledWith(
+    expect(rpcSpy).toHaveBeenCalledWith(
+      "create_sale_atomic",
       expect.objectContaining({
-        payment_method: "credit",
-        paid_amount: 0,
-        change_amount: 0,
-        customer_id: "customer-1",
-        store_id: "store-1",
+        p_payment_method: "credit",
+        p_paid_amount: 0,
+        p_customer_id: "customer-1",
       }),
     );
   });
 
-  it("inserts a customer_transactions row (type sale, amount = total, sale_id = new sale id) for a credit sale", async () => {
-    const { supabase, customerTransactionsInsertSpy } = createFakeSupabase(CREDIT_SALE);
+  it("passes p_customer_id/p_payment_method through to the RPC for a credit sale (customer_transactions insert is now server-side, not observable here)", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase(CREDIT_SALE);
 
     await createSale(supabase, { ...BASE_PAYLOAD, paymentMethod: "credit", customerId: "customer-1" }, "store-1");
 
-    expect(customerTransactionsInsertSpy).toHaveBeenCalledWith({
-      customer_id: "customer-1",
-      type: "sale",
-      amount: 200,
-      sale_id: "sale-1",
-      store_id: "store-1",
-    });
+    expect(rpcSpy).toHaveBeenCalledWith(
+      "create_sale_atomic",
+      expect.objectContaining({
+        p_customer_id: "customer-1",
+        p_payment_method: "credit",
+      }),
+    );
   });
 
-  it("regression guard: default/omitted paymentMethod still inserts payment_method cash and never touches customer_transactions", async () => {
-    const { supabase, salesInsertSpy, customerTransactionsInsertSpy } = createFakeSupabase(CASH_SALE);
+  it("regression guard: default/omitted paymentMethod calls the RPC with p_payment_method cash and p_customer_id null", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase(CASH_SALE);
 
     await createSale(supabase, BASE_PAYLOAD, "store-1");
 
-    expect(salesInsertSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ payment_method: "cash", customer_id: null, store_id: "store-1" }),
+    expect(rpcSpy).toHaveBeenCalledWith(
+      "create_sale_atomic",
+      expect.objectContaining({ p_payment_method: "cash", p_customer_id: null }),
     );
-    expect(customerTransactionsInsertSpy).not.toHaveBeenCalled();
   });
 });
 
 describe("createSale — discount validation", () => {
-  it("succeeds when discount equals subtotal exactly (boundary): discount_amount = subtotal, total_amount = 0", async () => {
-    const { supabase, salesInsertSpy } = createFakeSupabase(CASH_SALE);
+  it("succeeds when discount equals subtotal exactly (boundary): RPC called with p_discount_amount = subtotal", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase(CASH_SALE);
 
     await createSale(supabase, { ...BASE_PAYLOAD, discountAmount: 200, paidAmount: 0 }, "store-1");
 
-    expect(salesInsertSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ subtotal: 200, discount_amount: 200, total_amount: 0 }),
+    expect(rpcSpy).toHaveBeenCalledWith(
+      "create_sale_atomic",
+      expect.objectContaining({ p_discount_amount: 200 }),
     );
   });
 
@@ -198,13 +150,14 @@ describe("createSale — discount validation", () => {
     ).rejects.toThrow("قيمة الخصم يجب أن تكون صفراً أو أكبر");
   });
 
-  it("succeeds with a discount of 0 (common case)", async () => {
-    const { supabase, salesInsertSpy } = createFakeSupabase(CASH_SALE);
+  it("succeeds with a discount of 0 (common case): RPC called with p_discount_amount = 0", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase(CASH_SALE);
 
     await createSale(supabase, { ...BASE_PAYLOAD, discountAmount: 0 }, "store-1");
 
-    expect(salesInsertSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ discount_amount: 0 }),
+    expect(rpcSpy).toHaveBeenCalledWith(
+      "create_sale_atomic",
+      expect.objectContaining({ p_discount_amount: 0 }),
     );
   });
 });

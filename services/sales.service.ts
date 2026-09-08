@@ -1,33 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, PaymentMethod } from "@/types/database.types";
-import type { CheckoutPayload, CompletedSale, Sale, SaleItem, SaleItemInsert } from "@/types/pos";
+import type { CheckoutPayload, CompletedSale, Sale, SaleItem } from "@/types/pos";
 import { calculateTotals } from "@/types/pos";
-import { generateInvoiceNumber } from "@/lib/utils";
 import { logOperation } from "@/services/archive.service";
 
 type Client = SupabaseClient<Database>;
-
-/**
- * Pure row-building step, split out from createSale so the
- * quantity/price/unit-snapshot math is testable without touching Supabase.
- * Deliberately omits store_id — this function has no store context of its
- * own; createSale adds store_id when it maps these rows into the actual
- * insert payload.
- */
-export function buildSaleItemRows(saleId: string, items: CheckoutPayload["items"]): Omit<SaleItemInsert, "store_id">[] {
-  return items.map((item) => ({
-    sale_id: saleId,
-    product_id: item.productId,
-    product_name: item.name,
-    barcode: item.barcode,
-    quantity: item.quantity,
-    unit_price: item.unitPrice,
-    total_price: item.unitPrice * item.quantity,
-    unit_label: item.unitName ?? null,
-    unit_conversion_factor: item.unitConversionFactor ?? 1,
-    cost_price: item.costPrice,
-  }));
-}
 
 /** Maximum free-form date range (in days) accepted by any trend/ranking query, to protect mobile clients from accidentally-huge fetches. */
 export const MAX_RANGE_DAYS = 90;
@@ -181,18 +158,27 @@ function dayKeyOf(value: string | Date): string {
 }
 
 /**
- * Persists a completed sale (cash or credit): the invoice header and its
- * line items, plus a customer_transactions ledger row for credit sales.
- * Stock is no longer touched here — it's decremented atomically at
- * add-to-cart time instead (see services/products.service.ts#decrementStock
- * / hooks/usePOS.ts#addProductToCart). Not wrapped in a DB transaction (no
- * RPC layer yet) — acceptable for a single-till MVP, revisit before
- * multi-till rollout.
+ * Persists a completed sale (cash or credit) via the create_sale_atomic RPC
+ * — a security-definer function that is now the ONLY way to insert into
+ * sales/sale_items/customer_transactions(type=sale). Prices are NEVER sent
+ * by the client: only product identity (product_id + optional unit_name)
+ * and quantity per line, plus payment metadata. The RPC looks up real,
+ * current prices itself and computes subtotal/total server-side, closing
+ * the client-trusted-price vulnerability the old direct-insert path had
+ * (see supabase/migrations/00000000000027_atomic_sale_recording.sql).
+ *
+ * Stock is not touched here — it's decremented atomically at add-to-cart
+ * time instead (see services/products.service.ts#decrementStock /
+ * hooks/usePOS.ts#addProductToCart).
+ *
+ * The client-side checks below (empty cart, credit-requires-customer,
+ * discount bounds) are cheap pre-flight feedback only — the RPC re-validates
+ * all of this authoritatively regardless, since it can't trust the client.
  *
  * payload.id/payload.invoiceNumber let a previously-queued offline sale
  * (see lib/offline/syncManager.ts) sync under the same identity its receipt
- * already showed the cashier. Both are optional and unused by the normal
- * online checkout path, which keeps generating them here as before.
+ * already showed the cashier. Both are optional and passed through to the
+ * RPC as p_client_sale_id/p_client_invoice_number.
  *
  * Division of responsibility for CompletedSale.customerName: createSale only
  * has payload.customerId (an id) in scope, not the customer's display name,
@@ -209,14 +195,12 @@ export async function createSale(supabase: Client, payload: CheckoutPayload, sto
   if (paymentMethod === "credit" && !payload.customerId) {
     throw new Error("يجب اختيار زبون لإتمام بيع بالآجل");
   }
-  // Narrowed once here so both the sales insert and the customer_transactions
-  // insert below can use a plain string (payload.customerId's static type is
-  // string | null | undefined, but the guard above already ensures it's set
-  // whenever paymentMethod === "credit").
+  // Narrowed once here so it can be used as a plain string below
+  // (payload.customerId's static type is string | null | undefined, but the
+  // guard above already ensures it's set whenever paymentMethod === "credit").
   const customerId = payload.customerId as string | null;
 
-  const { subtotal, discountAmount, totalAmount } = calculateTotals(payload.items, payload.discountAmount);
-
+  const { subtotal, discountAmount } = calculateTotals(payload.items, payload.discountAmount);
   if (discountAmount < 0) {
     throw new Error("قيمة الخصم يجب أن تكون صفراً أو أكبر");
   }
@@ -224,60 +208,40 @@ export async function createSale(supabase: Client, payload: CheckoutPayload, sto
     throw new Error("قيمة الخصم أكبر من إجمالي الفاتورة");
   }
 
-  const paidAmount = paymentMethod === "credit" ? 0 : payload.paidAmount;
-  const changeAmount = paymentMethod === "credit" ? 0 : Math.max(payload.paidAmount - totalAmount, 0);
+  const { data, error } = await supabase.rpc("create_sale_atomic", {
+    p_items: payload.items.map((item) => ({
+      product_id: item.productId,
+      unit_name: item.unitName ?? null,
+      quantity: item.quantity,
+    })),
+    p_discount_amount: discountAmount,
+    p_payment_method: paymentMethod,
+    p_customer_id: paymentMethod === "credit" ? customerId : null,
+    p_paid_amount: paymentMethod === "credit" ? 0 : payload.paidAmount,
+    p_client_sale_id: payload.id ?? null,
+    p_client_invoice_number: payload.invoiceNumber ?? null,
+  });
 
-  const { data: sale, error: saleError } = await supabase
-    .from("sales")
-    .insert({
-      id: payload.id ?? undefined,
-      invoice_number: payload.invoiceNumber ?? generateInvoiceNumber(),
-      cashier_id: payload.cashierId,
-      subtotal,
-      discount_amount: discountAmount,
-      total_amount: totalAmount,
-      paid_amount: paidAmount,
-      change_amount: changeAmount,
-      payment_method: paymentMethod,
-      customer_id: paymentMethod === "credit" ? customerId : null,
-      store_id: storeId,
-    })
-    .select()
-    .single();
+  if (error) throw error;
+  const sale = data?.[0];
+  if (!sale) throw new Error("تعذر تسجيل عملية البيع");
 
-  if (saleError) throw saleError;
-
-  const saleItems: SaleItemInsert[] = buildSaleItemRows(sale.id, payload.items).map((item) => ({
-    ...item,
-    store_id: storeId,
-  }));
-
-  const { data: items, error: itemsError } = await supabase.from("sale_items").insert(saleItems).select();
-
+  const { data: items, error: itemsError } = await supabase
+    .from("sale_items")
+    .select("*")
+    .eq("sale_id", sale.id);
   if (itemsError) throw itemsError;
-
-  if (paymentMethod === "credit" && customerId) {
-    const { error: transactionError } = await supabase.from("customer_transactions").insert({
-      customer_id: customerId,
-      type: "sale",
-      amount: totalAmount,
-      sale_id: sale.id,
-      store_id: storeId,
-    });
-
-    if (transactionError) throw transactionError;
-  }
 
   await logOperation(supabase, {
     userId: payload.cashierId,
     actionType: "sale_created",
     entityType: "sale",
     entityId: sale.id,
-    description: `تم تسجيل عملية بيع بقيمة ${totalAmount} (فاتورة ${sale.invoice_number})`,
+    description: `تم تسجيل عملية بيع بقيمة ${sale.total_amount} (فاتورة ${sale.invoice_number})`,
     storeId,
   });
 
-  return { sale, items: items ?? [], changeAmount };
+  return { sale, items: items ?? [], changeAmount: sale.change_amount };
 }
 
 export async function getDailySales(supabase: Client, date: Date): Promise<Sale[]> {

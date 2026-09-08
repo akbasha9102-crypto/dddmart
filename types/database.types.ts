@@ -1037,6 +1037,18 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["returns"]["Row"][];
       };
+      create_sale_atomic: {
+        Args: {
+          p_items: { product_id: string; unit_name: string | null; quantity: number }[];
+          p_discount_amount: number;
+          p_payment_method: string;
+          p_customer_id: string | null;
+          p_paid_amount: number;
+          p_client_sale_id?: string | null;
+          p_client_invoice_number?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["sales"]["Row"][];
+      };
     };
     Enums: Record<string, never>;
   };
