@@ -176,7 +176,7 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
 
         <Input label="الوحدة" value={unit} onChange={(event) => setUnit(event.target.value)} />
 
-        {product ? <ProductUnitsManager productId={product.id} /> : null}
+        {product && isAdminRole(role) ? <ProductUnitsManager productId={product.id} /> : null}
 
         {product && isAdminRole(role) ? (
           <Button type="button" variant="secondary" onClick={() => setIsReceiveStockOpen(true)}>
