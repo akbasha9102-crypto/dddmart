@@ -70,7 +70,7 @@ async function getReturnsInRange(
 
   if (returns.length > 0) {
     const { data: saleItems, error: saleItemsError } = await supabase
-      .from("sale_items")
+      .from("sale_items_secure")
       .select("id, unit_price, cost_price")
       .in(
         "id",
@@ -227,7 +227,7 @@ export async function createSale(supabase: Client, payload: CheckoutPayload, sto
   if (!sale) throw new Error("تعذر تسجيل عملية البيع");
 
   const { data: items, error: itemsError } = await supabase
-    .from("sale_items")
+    .from("sale_items_secure")
     .select("*")
     .eq("sale_id", sale.id);
   if (itemsError) throw itemsError;
@@ -262,7 +262,7 @@ export async function getDailySales(supabase: Client, date: Date): Promise<Sale[
 }
 
 export async function getSaleItems(supabase: Client, saleId: string): Promise<SaleItem[]> {
-  const { data, error } = await supabase.from("sale_items").select("*").eq("sale_id", saleId);
+  const { data, error } = await supabase.from("sale_items_secure").select("*").eq("sale_id", saleId);
 
   if (error) throw error;
   return data ?? [];
@@ -332,7 +332,7 @@ async function computeProfitForSales(supabase: Client, sales: Sale[]): Promise<n
   if (sales.length === 0) return 0;
 
   const { data: items, error: itemsError } = await supabase
-    .from("sale_items")
+    .from("sale_items_secure")
     .select("quantity, unit_price, cost_price")
     .in(
       "sale_id",
@@ -479,7 +479,7 @@ export async function getDailyReportDetails(supabase: Client, date: Date): Promi
   let totalItemsSold = 0;
   if (sales.length > 0) {
     const { data: items, error: itemsError } = await supabase
-      .from("sale_items")
+      .from("sale_items_secure")
       .select("quantity")
       .in(
         "sale_id",
@@ -576,7 +576,7 @@ export async function getSalesTrend(supabase: Client, range: SalesTrendRange): P
   const profitBySaleId = new Map<string, number>();
   if (saleRows.length > 0) {
     const { data: items, error: itemsError } = await supabase
-      .from("sale_items")
+      .from("sale_items_secure")
       .select("sale_id, quantity, unit_price, cost_price")
       .in(
         "sale_id",
@@ -731,7 +731,7 @@ export async function getProductRanking(supabase: Client, startDate: Date, endDa
   let items: { sale_id: string; product_id: string | null; product_name: string; quantity: number; unit_price: number; total_price: number; cost_price: number }[] = [];
   if (sales && sales.length > 0) {
     const { data, error: itemsError } = await supabase
-      .from("sale_items")
+      .from("sale_items_secure")
       .select("sale_id, product_id, product_name, quantity, unit_price, total_price, cost_price")
       .in(
         "sale_id",
@@ -907,7 +907,7 @@ export async function getSalesForExport(supabase: Client, startDate: Date, endDa
   }
 
   const { data: items, error: itemsError } = await supabase
-    .from("sale_items")
+    .from("sale_items_secure")
     .select("sale_id, quantity")
     .in(
       "sale_id",
@@ -985,7 +985,7 @@ export async function getCategoryRanking(supabase: Client, startDate: Date, endD
   let items: { sale_id: string; product_id: string | null; quantity: number; unit_price: number; total_price: number; cost_price: number }[] = [];
   if (sales && sales.length > 0) {
     const { data, error: itemsError } = await supabase
-      .from("sale_items")
+      .from("sale_items_secure")
       .select("sale_id, product_id, quantity, unit_price, total_price, cost_price")
       .in(
         "sale_id",
@@ -1183,7 +1183,7 @@ export async function getCashierRanking(supabase: Client, startDate: Date, endDa
   const aggBySaleId = new Map<string, SaleAgg>();
   if (sales.length > 0) {
     const { data: items, error: itemsError } = await supabase
-      .from("sale_items")
+      .from("sale_items_secure")
       .select("sale_id, quantity, unit_price, total_price, cost_price")
       .in("sale_id", sales.map((sale) => sale.id));
     if (itemsError) throw itemsError;

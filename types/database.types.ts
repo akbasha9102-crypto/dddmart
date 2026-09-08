@@ -1011,6 +1011,23 @@ export interface Database {
         };
         Relationships: [];
       };
+      sale_items_secure: {
+        Row: {
+          id: string;
+          sale_id: string;
+          product_id: string | null;
+          product_name: string;
+          barcode: string;
+          quantity: number;
+          unit_price: number;
+          total_price: number;
+          unit_label: string | null;
+          unit_conversion_factor: number;
+          cost_price: number;
+          store_id: string;
+        };
+        Relationships: [];
+      };
     };
     Functions: {
       adjust_product_stock: {

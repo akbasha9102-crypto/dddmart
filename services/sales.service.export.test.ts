@@ -50,7 +50,7 @@ function createFakeSupabase(fixtures: {
           }),
         };
       }
-      if (table === "sale_items") {
+      if (table === "sale_items_secure") {
         return {
           select: () => ({
             in: async (column: string, values: string[]) => {

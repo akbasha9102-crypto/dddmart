@@ -40,7 +40,7 @@ function createFakeSupabase(
   const supabase = {
     rpc: rpcSpy,
     from: (table: string) => {
-      if (table === "sale_items") return { select: saleItemsSelectSpy };
+      if (table === "sale_items_secure") return { select: saleItemsSelectSpy };
       if (table === "operations_log") return { insert: logInsertSpy };
       throw new Error(`unexpected table ${table}`);
     },
