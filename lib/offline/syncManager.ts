@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import { decrementStock } from "@/services/products.service";
+import { decrementStock, isUniqueViolation } from "@/services/products.service";
 import { createSale } from "@/services/sales.service";
 import { holdSale } from "@/services/heldSales.service";
 import { toBaseUnits } from "@/lib/units";
@@ -31,6 +31,25 @@ class PartialStockDecrementError extends Error {
   constructor(public readonly cause: unknown) {
     super("stock partially decremented before a later line item failed");
   }
+}
+
+/**
+ * True only for a Postgres 23505 (unique_violation) that names the
+ * `sales_pkey` constraint specifically — see audit item #10. `sales` also
+ * has a unique (store_id, invoice_number) constraint that can collide
+ * between two different, never-persisted sales (generateInvoiceNumber() in
+ * lib/utils.ts only has a 4-digit random suffix per day), so a bare 23505
+ * code is not enough evidence that this exact sale already synced.
+ */
+function isSalesPkeyViolation(err: unknown): boolean {
+  return (
+    isUniqueViolation(err) &&
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof (err as { message?: unknown }).message === "string" &&
+    (err as { message: string }).message.includes("sales_pkey")
+  );
 }
 
 export interface SyncResult {
@@ -99,6 +118,32 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
         await setOutbox(outbox);
         syncedCount += 1;
       } catch (err) {
+        // A 23505 (unique_violation) specifically on the `sales_pkey`
+        // constraint means this exact sale (sales.id === sale.localId, via
+        // create_sale_atomic's p_client_sale_id) already exists server-side
+        // — an earlier createSale call for this same localId already
+        // succeeded and only the response was lost (e.g. a cross-tab race
+        // on the same still-"pending" sale; isSyncing above only guards
+        // this tab — see audit item #12, out of scope here). Nothing to
+        // reconcile: mark "synced" and move on to the rest of the batch.
+        //
+        // Deliberately narrow to sales_pkey by name: `sales` ALSO has a
+        // unique (store_id, invoice_number) constraint, and
+        // generateInvoiceNumber() (lib/utils.ts) only has a 4-digit random
+        // suffix per day — a genuine collision between two DIFFERENT,
+        // never-persisted sales is realistically possible in a busy store.
+        // Treating ANY 23505 as "already synced" would risk silently
+        // dropping a real sale that never actually saved. Only the PK
+        // collision is unambiguous proof this exact sale succeeded — any
+        // other 23505 falls through to the existing partial/pending logic
+        // below, same as before — see audit item #10.
+        if (isSalesPkeyViolation(err)) {
+          outbox = markSynced(outbox, sale.localId);
+          await setOutbox(outbox);
+          syncedCount += 1;
+          continue;
+        }
+
         // Unexpected error (e.g. network dropped mid-replay). Real stock
         // may already have been decremented for this sale — either
         // decrementStockForSale itself returned successfully (stockDecremented

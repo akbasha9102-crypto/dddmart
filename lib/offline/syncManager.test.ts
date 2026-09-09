@@ -28,6 +28,8 @@ vi.mock("@/services/sales.service", () => ({
 const decrementStockMock = vi.fn(async (..._args: unknown[]) => undefined as unknown);
 vi.mock("@/services/products.service", () => ({
   decrementStock: (...args: unknown[]) => decrementStockMock(...args),
+  isUniqueViolation: (error: unknown) =>
+    typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505",
 }));
 
 const holdSaleMock = vi.fn(async (..._args: unknown[]) => ({}));
@@ -242,5 +244,63 @@ describe("syncOutbox — sales replay phase", () => {
     expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
     expect(decrementStockMock).toHaveBeenCalledTimes(2);
     expect(createSaleMock).not.toHaveBeenCalled();
+  });
+
+  it("treats a 23505 on sales_pkey from createSale as already-synced — audit item #10", async () => {
+    outboxState.sales = [makeSale({ localId: "sale-1" })];
+    createSaleMock.mockRejectedValueOnce({
+      code: "23505",
+      message: 'duplicate key value violates unique constraint "sales_pkey"',
+    });
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(1);
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("synced");
+  });
+
+  it("continues processing the rest of the batch after a sales_pkey 23505 (does not stop the run) — audit item #10", async () => {
+    const first = makeSale({ localId: "sale-1", createdAt: "2026-08-07T09:00:00.000Z" });
+    const second = makeSale({ localId: "sale-2", createdAt: "2026-08-07T10:00:00.000Z" });
+    outboxState.sales = [first, second];
+    createSaleMock.mockRejectedValueOnce({
+      code: "23505",
+      message: 'duplicate key value violates unique constraint "sales_pkey"',
+    });
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(2);
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("synced");
+    expect(outboxState.sales.find((s) => s.localId === "sale-2")?.status).toBe("synced");
+    expect(createSaleMock).toHaveBeenCalledTimes(2);
+    expect(decrementStockMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does NOT treat a 23505 on a DIFFERENT constraint (e.g. invoice_number collision) as already-synced — falls through to partial, audit item #10", async () => {
+    outboxState.sales = [makeSale({ localId: "sale-1" })];
+    createSaleMock.mockRejectedValueOnce({
+      code: "23505",
+      message: 'duplicate key value violates unique constraint "sales_store_id_invoice_number_key"',
+    });
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(0);
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
+  });
+
+  it("a non-23505 error still falls through to the existing partial-marking logic unchanged (regression guard) — audit item #10", async () => {
+    outboxState.sales = [makeSale({ localId: "sale-1" })];
+    createSaleMock.mockRejectedValueOnce({ code: "23503", message: "foreign key violation" });
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(0);
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
   });
 });
