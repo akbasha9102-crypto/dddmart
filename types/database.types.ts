@@ -1055,6 +1055,15 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["returns"]["Row"][];
       };
+      record_damage: {
+        Args: {
+          p_product_id: string;
+          p_product_name: string;
+          p_quantity: number;
+          p_reason: string | null;
+        };
+        Returns: Database["public"]["Tables"]["stock_damages"]["Row"][];
+      };
       record_reconciliation: {
         Args: {
           p_product_id: string;

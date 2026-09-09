@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import type { StockDamage } from "@/types/returns";
-import { decrementStock } from "@/services/products.service";
 import { logOperation } from "@/services/archive.service";
 
 type Client = SupabaseClient<Database>;
@@ -14,12 +13,18 @@ export interface RecordDamageParams {
 }
 
 /**
- * Records damaged/expired stock: decrements stock FIRST (opposite order
- * from returns) so a stock_damages row can never exist without its
- * matching decrement having actually happened. Throws a friendly Arabic
- * error and inserts nothing if there isn't enough stock. cost_price is
- * snapshotted from decrementStock's own returned row (not a separate
- * fetch), so it reflects the exact cost basis at the moment of decrement.
+ * Records damaged/expired stock via the record_damage RPC, which atomically
+ * row-locks the product, validates quantity against the LOCKED read,
+ * decrements products.quantity, and inserts the stock_damages row — all in
+ * one security-definer transaction (see
+ * supabase/migrations/00000000000040_record_damage_atomic.sql). cost_price/
+ * loss_amount are always computed server-side from the locked product row,
+ * never trusted from a client parameter. On insufficient stock (or any
+ * other RPC validation failure), the RPC raises a friendly Arabic
+ * exception, which surfaces here as a thrown Error with that message —
+ * nothing is inserted in that case. After a successful call, fetches the
+ * product's `unit` (display-only, for the operation-log message) with one
+ * lightweight follow-up read, then logs a damage_recorded operation.
  */
 export async function recordDamage(
   supabase: Client,
@@ -27,43 +32,32 @@ export async function recordDamage(
   actorId: string | null,
   storeId: string,
 ): Promise<StockDamage> {
-  const updated = await decrementStock(supabase, params.productId, params.quantity);
-  if (!updated) {
-    const { data: current, error: currentError } = await supabase
-      .from("products")
-      .select("quantity")
-      .eq("id", params.productId)
-      .maybeSingle();
-    if (currentError) throw currentError;
-    throw new Error(`الكمية أكبر من المخزون المتوفر (المتوفر: ${current?.quantity ?? 0})`);
+  const { data, error } = await supabase.rpc("record_damage", {
+    p_product_id: params.productId,
+    p_product_name: params.productName,
+    p_quantity: params.quantity,
+    p_reason: params.reason,
+  });
+  if (error) throw error;
+
+  const inserted = data?.[0];
+  if (!inserted) {
+    throw new Error("تعذر تسجيل التلف — حاول مرة أخرى");
   }
 
-  const costPrice = updated.cost_price;
-  const lossAmount = params.quantity * costPrice;
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("stock_damages")
-    .insert({
-      product_id: params.productId,
-      product_name: params.productName,
-      quantity: params.quantity,
-      cost_price: costPrice,
-      loss_amount: lossAmount,
-      reason: params.reason,
-      actor_id: actorId,
-      store_id: storeId,
-    })
-    .select()
-    .single();
-
-  if (insertError) throw insertError;
+  const { data: product, error: productError } = await supabase
+    .from("products")
+    .select("unit")
+    .eq("id", params.productId)
+    .maybeSingle();
+  if (productError) throw productError;
 
   await logOperation(supabase, {
     userId: actorId,
     actionType: "damage_recorded",
     entityType: "stock",
     entityId: params.productId,
-    description: `تم تسجيل تلف ${params.quantity} ${updated.unit} من "${params.productName}" — خسارة ${lossAmount}`,
+    description: `تم تسجيل تلف ${inserted.quantity} ${product?.unit ?? ""} من "${inserted.product_name}" — خسارة ${inserted.loss_amount}`,
     storeId,
   });
 
