@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { usePOS, type UsePOSReturn } from "@/hooks/usePOS";
 import { useShift } from "@/hooks/useShift";
 import { useAuth } from "@/context/AuthContext";
+import { useOfflineContext } from "@/context/OfflineContext";
 
 type POSContextValue = UsePOSReturn & {
   shift: ReturnType<typeof useShift>["shift"];
@@ -19,6 +20,7 @@ const POSContext = createContext<POSContextValue | null>(null);
 
 export function POSProvider({ children }: { children: ReactNode }) {
   const { user, storeId } = useAuth();
+  const { isOnline } = useOfflineContext();
   const {
     shift,
     isLoading: isShiftLoading,
@@ -27,7 +29,7 @@ export function POSProvider({ children }: { children: ReactNode }) {
     open: openShift,
     close: closeShift,
   } = useShift({ cashierId: user?.id ?? null, storeId });
-  const pos = usePOS({ cashierId: user?.id ?? null, storeId, shift });
+  const pos = usePOS({ cashierId: user?.id ?? null, storeId, shift, isOnline });
 
   return (
     <POSContext.Provider

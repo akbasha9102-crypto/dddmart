@@ -7,7 +7,6 @@ import { decrementStock, incrementStock, resolveBarcode } from "@/services/produ
 import { createSale } from "@/services/sales.service";
 import { holdSale, resumeHeldSale } from "@/services/heldSales.service";
 import { useCart } from "@/hooks/useCart";
-import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { findCartItemByBarcode, productToCartItem, productUnitToCartItem, calculateTotals } from "@/types/pos";
 import type { CompletedSale } from "@/types/pos";
 import type { Product } from "@/types/product";
@@ -23,11 +22,11 @@ interface UsePOSOptions {
   cashierId: string | null;
   storeId: string | null;
   shift: Shift | null;
+  isOnline: boolean;
 }
 
-export function usePOS({ cashierId, storeId, shift }: UsePOSOptions) {
+export function usePOS({ cashierId, storeId, shift, isOnline }: UsePOSOptions) {
   const cart = useCart();
-  const { isOnline } = useOnlineStatus();
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
