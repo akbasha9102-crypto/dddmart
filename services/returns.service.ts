@@ -48,7 +48,11 @@ export interface RecordReturnParams {
  * vulnerable to a double-count race (audit 2.3) and an inflated-refund
  * exploit (audit 2.2). RPC-before-increment is deliberate: if
  * incrementStock fails/no-ops, the return is still recorded rather than
- * silently lost.
+ * silently lost. incrementStock uses product_id/quantity/
+ * unit_conversion_factor from the RPC's OWN RETURNED ROW (`inserted`),
+ * never from `params` -- record_return substitutes the authoritative
+ * sale_items values server-side (00000000000039), so trusting `params`
+ * here would silently reopen that fix at the stock-increment call site.
  */
 export async function recordReturn(
   supabase: Client,
@@ -73,8 +77,8 @@ export async function recordReturn(
   const inserted = data?.[0];
   if (!inserted) throw new Error("تعذر تسجيل الإرجاع");
 
-  if (params.productId) {
-    await incrementStock(supabase, params.productId, toBaseUnits(params.quantity, params.unitConversionFactor));
+  if (inserted.product_id) {
+    await incrementStock(supabase, inserted.product_id, toBaseUnits(inserted.quantity, inserted.unit_conversion_factor));
   }
 
   await logOperation(supabase, {

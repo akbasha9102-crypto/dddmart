@@ -116,9 +116,43 @@ describe("recordReturn", () => {
     });
     expect(rpcSpy).toHaveBeenCalledWith("adjust_product_stock", {
       p_product_id: "product-1",
-      p_delta: 24,
+      p_delta: 2,
     });
     expect(result).toEqual(INSERTED_RETURN);
+  });
+
+  it("uses the RPC response's product_id/quantity/unit_conversion_factor for incrementStock, not the client-supplied params (regression test: forged params must not inflate/misdirect stock)", async () => {
+    const forgedResponse: Return = {
+      ...INSERTED_RETURN,
+      product_id: "real-product-1",
+      quantity: 1,
+      unit_conversion_factor: 24,
+    };
+    const { supabase, rpcSpy } = createFakeSupabase({
+      recordReturnResult: { data: [forgedResponse], error: null },
+    });
+
+    await recordReturn(
+      supabase,
+      {
+        ...BASE_PARAMS,
+        productId: "forged-product-999",
+        quantity: 1,
+        unitConversionFactor: 2400,
+      },
+      "user-1",
+      "store-1",
+    );
+
+    expect(rpcSpy).toHaveBeenCalledWith("adjust_product_stock", {
+      p_product_id: "real-product-1",
+      p_delta: 24,
+    });
+    expect(rpcSpy).not.toHaveBeenCalledWith(
+      "adjust_product_stock",
+      expect.objectContaining({ p_product_id: "forged-product-999" }),
+    );
+    expect(rpcSpy).not.toHaveBeenCalledWith("adjust_product_stock", expect.objectContaining({ p_delta: 2400 }));
   });
 
   it("throws the RPC's Arabic over-quantity error and never touches stock (rejected return must not mutate stock)", async () => {
