@@ -31,11 +31,13 @@ function assertRangeWithinLimit(startDate: Date, endDate: Date): void {
  * partial/overridden refund shouldn't distort the profit-reversal math.
  */
 interface ReturnForReporting {
+  sale_id: string;
   sale_item_id: string;
   product_id: string | null;
   product_name: string;
   quantity: number;
   refund_amount: number;
+  actor_id: string | null;
   created_at: string;
 }
 
@@ -59,7 +61,7 @@ async function getReturnsInRange(
 ): Promise<{ returns: ReturnForReporting[]; saleItemById: Map<string, SaleItemProfitInfo> }> {
   const { data: returnRows, error: returnsError } = await supabase
     .from("returns")
-    .select("sale_item_id, product_id, product_name, quantity, refund_amount, created_at")
+    .select("sale_id, sale_item_id, product_id, product_name, quantity, refund_amount, actor_id, created_at")
     .gte("created_at", startDate.toISOString())
     .lte("created_at", endDate.toISOString());
 
@@ -100,6 +102,7 @@ interface DamageForReporting {
   product_id: string | null;
   product_name: string;
   loss_amount: number;
+  actor_id: string | null;
   created_at: string;
 }
 
@@ -107,7 +110,7 @@ interface DamageForReporting {
 async function getDamagesInRange(supabase: Client, startDate: Date, endDate: Date): Promise<DamageForReporting[]> {
   const { data, error } = await supabase
     .from("stock_damages")
-    .select("product_id, product_name, loss_amount, created_at")
+    .select("product_id, product_name, loss_amount, actor_id, created_at")
     .gte("created_at", startDate.toISOString())
     .lte("created_at", endDate.toISOString());
 
@@ -123,6 +126,7 @@ interface ReconciliationForReporting {
   product_id: string | null;
   product_name: string;
   loss_value: number;
+  actor_id: string | null;
   created_at: string;
 }
 
@@ -130,7 +134,7 @@ interface ReconciliationForReporting {
 async function getReconciliationLossInRange(supabase: Client, startDate: Date, endDate: Date): Promise<ReconciliationForReporting[]> {
   const { data, error } = await supabase
     .from("stock_reconciliations")
-    .select("product_id, product_name, loss_value, created_at")
+    .select("product_id, product_name, loss_value, actor_id, created_at")
     .gte("created_at", startDate.toISOString())
     .lte("created_at", endDate.toISOString());
 
@@ -1154,6 +1158,15 @@ const NULL_CASHIER_KEY = "__null__";
  * still yields a single merged row with the other side's fields at 0. A null
  * cashier_id/actor_id (or a cashier whose profile row no longer exists) falls
  * back to "غير معروف" — same convention as getSalesForExport.
+ *
+ * totalProfit is netted the same way as the other reporting functions
+ * (getDailySalesSummary/getProductRanking): each return reverses the
+ * ORIGINATING cashier's totalProfit by the original line's real margin
+ * ((unit_price - cost_price) * quantity), never refund_amount, since a
+ * partial/overridden refund shouldn't distort the profit-reversal math.
+ * Damages/reconciliations aren't tied to a sale, so there's no "originating
+ * cashier" concept for them — they're netted against totalProfit via
+ * actor_id instead (the cashier who recorded the damage/reconciliation).
  */
 export async function getCashierRanking(supabase: Client, startDate: Date, endDate: Date): Promise<CashierRankingStat[]> {
   assertRangeWithinLimit(startDate, endDate);
@@ -1167,16 +1180,14 @@ export async function getCashierRanking(supabase: Client, startDate: Date, endDa
   if (salesError) throw salesError;
   const sales = salesData ?? [];
 
-  // 2. In-range returns (own fetch: getReturnsInRange doesn't select sale_id/actor_id).
-  const { data: returnsData, error: returnsError } = await supabase
-    .from("returns")
-    .select("sale_id, actor_id, refund_amount, created_at")
-    .gte("created_at", startDate.toISOString())
-    .lte("created_at", endDate.toISOString());
-  if (returnsError) throw returnsError;
-  const returns = returnsData ?? [];
+  // 2. In-range returns (reused fetch — also gives saleItemById for the profit-reversal calc).
+  const { returns, saleItemById } = await getReturnsInRange(supabase, startDate, endDate);
 
-  if (sales.length === 0 && returns.length === 0) return [];
+  // 2b. In-range damages/reconciliations, attributed by actor_id (no "originating cashier" concept for these — they aren't tied to a sale).
+  const damages = await getDamagesInRange(supabase, startDate, endDate);
+  const reconciliations = await getReconciliationLossInRange(supabase, startDate, endDate);
+
+  if (sales.length === 0 && returns.length === 0 && damages.length === 0 && reconciliations.length === 0) return [];
 
   // 3. sale_items for in-range sales -> per-sale revenue/quantity/profit.
   interface SaleAgg { revenue: number; quantity: number; profit: number }
@@ -1215,6 +1226,8 @@ export async function getCashierRanking(supabase: Client, startDate: Date, endDa
         ...sales.map((sale) => sale.cashier_id),
         ...Array.from(originatingCashierBySaleId.values()),
         ...returns.map((row) => row.actor_id),
+        ...damages.map((row) => row.actor_id),
+        ...reconciliations.map((row) => row.actor_id),
       ].filter((id): id is string => id !== null),
     ),
   );
@@ -1261,15 +1274,33 @@ export async function getCashierRanking(supabase: Client, startDate: Date, endDa
 
   returns.forEach((row) => {
     // sold side: cashier who originally sold (may be null if sale missing/unattributed).
+    // Also reverses the ORIGINAL sale's actual line margin from that cashier's totalProfit
+    // (never refund_amount) — same formula as getProductRanking, attributed to the
+    // originating cashier because the profit being reversed is the profit of that sale.
     const originatingCashier = originatingCashierBySaleId.get(row.sale_id) ?? null;
     const soldBucket = ensureBucket(originatingCashier);
     soldBucket.soldReturnsCount += 1;
     soldBucket.soldReturnsValue += row.refund_amount;
+    const line = saleItemById.get(row.sale_item_id);
+    if (line) soldBucket.totalProfit -= (line.unit_price - line.cost_price) * row.quantity;
 
     // processed side: cashier who processed the return.
     const processedBucket = ensureBucket(row.actor_id);
     processedBucket.processedReturnsCount += 1;
     processedBucket.processedReturnsValue += row.refund_amount;
+  });
+
+  // Damages/reconciliations aren't tied to a sale, so actor_id is the only meaningful
+  // attribution — mirrors getProductRanking's bucket.totalProfit -= loss_amount/loss_value,
+  // just keyed by cashier instead of product.
+  damages.forEach((row) => {
+    const bucket = ensureBucket(row.actor_id);
+    bucket.totalProfit -= row.loss_amount;
+  });
+
+  reconciliations.forEach((row) => {
+    const bucket = ensureBucket(row.actor_id);
+    bucket.totalProfit -= row.loss_value;
   });
 
   return Array.from(byKey.values()).sort((a, b) => b.totalRevenue - a.totalRevenue);
