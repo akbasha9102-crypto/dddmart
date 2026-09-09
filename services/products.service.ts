@@ -228,27 +228,17 @@ export async function deleteProduct(supabase: Client, id: string, actorId: strin
 }
 
 /**
- * Atomically decrements stock by `quantity`, guarded so it can never go
- * below zero. Returns the updated product, or null if there wasn't enough
- * stock at the instant this ran (lost a race to a concurrent sale/scan, or
- * stock changed since the cart snapshot was taken) — callers must treat
- * null as "insufficient stock now", not throw a generic error.
- */
-export async function decrementStock(supabase: Client, productId: string, quantity: number): Promise<Product | null> {
-  const { data, error } = await supabase.rpc("adjust_product_stock", {
-    p_product_id: productId,
-    p_delta: -quantity,
-  });
-  if (error) throw error;
-  return data?.[0] ?? null;
-}
-
-/**
- * Atomically restores (increments) stock by `quantity` — the symmetric
- * inverse of decrementStock, used when a cart line is removed, its quantity
- * reduced, or the whole cart is cleared before checkout. Always succeeds
- * (increment can't fail the >= 0 guard) unless the product row itself was
- * deleted, in which case it resolves to null.
+ * Atomically restores (increments) stock by `quantity`. Stock is no longer
+ * reserved at add-to-cart time (see hooks/usePOS.ts#addProductToCart and
+ * supabase/migrations/00000000000042_checkout_time_stock_decrement.sql /
+ * 00000000000043_hold_sale_stock_decrement.sql) — the authoritative
+ * check-and-decrement now happens inside create_sale_atomic/hold_sale
+ * themselves at checkout/hold time. This function's only remaining callers
+ * are release/restore paths: cancelHeldSale (discarding a held sale) and
+ * resumeHeldSale (releasing a held sale's reservation back into the pool
+ * before its later checkout re-decrements). Always succeeds (increment
+ * can't fail the >= 0 guard) unless the product row itself was deleted, in
+ * which case it resolves to null.
  */
 export async function incrementStock(supabase: Client, productId: string, quantity: number): Promise<Product | null> {
   const { data, error } = await supabase.rpc("adjust_product_stock", {

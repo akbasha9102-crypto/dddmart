@@ -16,7 +16,21 @@ export interface PendingStockOp {
 export interface PendingSale {
   /** Client-generated id (crypto.randomUUID()), used as the outbox key and as the sale's id when synced. */
   localId: string;
-  /** "partial" = decrementStockForSale succeeded (real stock reduced, possibly only partway through the line items) but the sale record itself was never persisted — see lib/offline/syncManager.ts's PartialStockDecrementError and audit item #9. Distinct from "conflict" (insufficient stock is a normal business outcome); "partial" means the outbox can no longer safely auto-retry and needs a human to reconcile stock. */
+  /**
+   * "partial" is no longer produced going forward — it dates from when
+   * offline sale replay decremented stock in a separate pre-flight step
+   * before persisting the sale (audit item #9), which could leave real
+   * stock decremented with no sale record if it failed mid-way. As of
+   * supabase/migrations/00000000000042_checkout_time_stock_decrement.sql,
+   * create_sale_atomic (called via createSale, see lib/offline/
+   * syncManager.ts) does the stock check-and-decrement AND the sale insert
+   * in one atomic transaction, so that partial state can no longer occur —
+   * any failure now safely resets to "pending" for retry. This status is
+   * kept in the union (not deleted) purely so already-queued outbox data on
+   * a cashier's device from before this change can still be displayed
+   * correctly; nothing in the codebase sets it anymore. Distinct from
+   * "conflict" (insufficient stock is a normal business outcome).
+   */
   status: "pending" | "syncing" | "conflict" | "synced" | "partial";
   createdAt: string; // ISO, used for FIFO replay order and receipt display
   payload: CheckoutPayload;
@@ -43,13 +57,14 @@ export interface PendingSale {
 
 /**
  * A "hold sale" (تعليق) that happened while offline, queued in IndexedDB
- * until the connection returns. Unlike PendingSale, holding never touches
- * stock — items were already decremented at add-to-cart time (see
- * hooks/usePOS.ts / services/heldSales.service.ts#holdSale) — so there is
- * no stock-mutation risk and the "conflict" status is structurally
- * unreachable here. It's kept anyway for type parity with PendingSale (same
- * status union, same syncManager.ts patterns) rather than carving out a
- * narrower type just for this one field.
+ * until the connection returns. As of
+ * supabase/migrations/00000000000043_hold_sale_stock_decrement.sql, hold_sale
+ * atomically reserves stock per line at hold time (row-locked
+ * check-and-decrement, same pattern as create_sale_atomic) — so unlike
+ * before that migration, replaying a queued held sale CAN now hit a genuine
+ * insufficient-stock conflict, surfaced via the "conflict" status below
+ * (see lib/offline/syncManager.ts's isInsufficientStockError handling and
+ * markHeldSaleConflict in lib/offline/outbox.ts).
  */
 export interface PendingHeldSale {
   /** Client-generated id (crypto.randomUUID()), used as the outbox key. */

@@ -75,9 +75,12 @@ export async function getPendingSales(): Promise<PendingSale[]> {
 
 /**
  * Pure outbox reducers for held sales (تعليق queued while offline) —
- * mirrors the sale reducers above one-for-one. See types/offline.ts for why
- * "conflict" is unreachable here (holding never touches stock) but kept for
- * type parity with PendingSale.
+ * mirrors the sale reducers above one-for-one. "conflict" is reachable here
+ * as of supabase/migrations/00000000000043_hold_sale_stock_decrement.sql:
+ * hold_sale now atomically reserves stock per line, so a queued held sale
+ * can genuinely fail with insufficient stock on replay — see
+ * markHeldSaleConflict below and lib/offline/syncManager.ts's
+ * isInsufficientStockError handling.
  */
 
 export function enqueueHeldSale(outbox: PendingHeldSale[], sale: PendingHeldSale): PendingHeldSale[] {

@@ -25,9 +25,7 @@ vi.mock("@/services/sales.service", () => ({
   createSale: (...args: unknown[]) => createSaleMock(...args),
 }));
 
-const decrementStockMock = vi.fn(async (..._args: unknown[]) => undefined as unknown);
 vi.mock("@/services/products.service", () => ({
-  decrementStock: (...args: unknown[]) => decrementStockMock(...args),
   isUniqueViolation: (error: unknown) =>
     typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505",
 }));
@@ -58,16 +56,6 @@ function makeSale(overrides: Partial<PendingSale> = {}): PendingSale {
   };
 }
 
-const TWO_ITEM_SALE_PAYLOAD: PendingSale["payload"] = {
-  items: [
-    { productId: "p1", name: "منتج 1", barcode: "1111", unitPrice: 10, costPrice: 6, quantity: 1, availableStock: 8 },
-    { productId: "p2", name: "منتج 2", barcode: "2222", unitPrice: 20, costPrice: 12, quantity: 1, availableStock: 4 },
-  ],
-  discountAmount: 0,
-  paidAmount: 30,
-  cashierId: "cashier-1",
-};
-
 const BASE_HELD_ITEMS: PendingHeldSale["items"] = [
   { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 10, costPrice: 6, quantity: 1, availableStock: 8 },
 ];
@@ -91,7 +79,6 @@ describe("syncOutbox — held-sale replay phase", () => {
     outboxState.sales = [];
     outboxState.held = [];
     createSaleMock.mockClear();
-    decrementStockMock.mockClear();
     holdSaleMock.mockClear();
     createSaleMock.mockResolvedValue({});
     holdSaleMock.mockResolvedValue({});
@@ -220,10 +207,24 @@ describe("syncOutbox — held-sale replay phase", () => {
     expect(holdSaleMock).toHaveBeenCalledTimes(1);
   });
 
+  it("marks a held sale as 'conflict' (not 'pending') when hold_sale throws an insufficient-stock error — migration 43", async () => {
+    const first = makeHeldSale({ localId: "held-1", createdAt: "2026-08-07T09:00:00.000Z" });
+    const second = makeHeldSale({ localId: "held-2", createdAt: "2026-08-07T10:00:00.000Z" });
+    outboxState.held = [first, second];
+    holdSaleMock.mockRejectedValueOnce({ message: "ERROR: الكمية المتوفرة من منتج غير كافية" });
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(outboxState.held.find((s) => s.localId === "held-1")?.status).toBe("conflict");
+    // Remaining held sales stay pending for the next sync attempt, same as any other break-on-error case.
+    expect(outboxState.held.find((s) => s.localId === "held-2")?.status).toBe("pending");
+    expect(result.syncedHeldCount).toBe(0);
+  });
+
   it("runs sales replay before held-sale replay (call-order assertion)", async () => {
     outboxState.sales = [makeSale({ localId: "sale-1" })];
     outboxState.held = [makeHeldSale({ localId: "held-1" })];
-    decrementStockMock.mockResolvedValue({ id: "p1", quantity: 5 });
 
     const calls: string[] = [];
     createSaleMock.mockImplementation(async () => {
@@ -247,14 +248,28 @@ describe("syncOutbox — sales replay phase", () => {
     outboxState.sales = [];
     outboxState.held = [];
     createSaleMock.mockClear();
-    decrementStockMock.mockClear();
     holdSaleMock.mockClear();
     createSaleMock.mockResolvedValue({ sale: { total_amount: 10 }, items: [], changeAmount: 0 });
-    decrementStockMock.mockResolvedValue({ id: "p1", quantity: 5 });
     holdSaleMock.mockResolvedValue({});
   });
 
-  it("on error mid-loop (createSale throws after stock was already decremented), marks the failing sale partial and leaves the rest pending — audit item #9", async () => {
+  it("calls createSale directly with no separate stock pre-flight step", async () => {
+    outboxState.sales = [makeSale({ localId: "sale-1" })];
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(1);
+    expect(createSaleMock).toHaveBeenCalledTimes(1);
+    expect(createSaleMock).toHaveBeenCalledWith(
+      FAKE_SUPABASE,
+      expect.objectContaining({ id: "sale-1", invoiceNumber: "INV-20260807-0001" }),
+      "store-1",
+    );
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("synced");
+  });
+
+  it("on a generic/network error from createSale, resets the failing sale to pending and leaves the rest pending", async () => {
     const first = makeSale({ localId: "sale-1", createdAt: "2026-08-07T09:00:00.000Z" });
     const second = makeSale({ localId: "sale-2", createdAt: "2026-08-07T10:00:00.000Z" });
     outboxState.sales = [first, second];
@@ -264,48 +279,21 @@ describe("syncOutbox — sales replay phase", () => {
     const result = await syncOutbox(FAKE_SUPABASE);
 
     expect(result.syncedCount).toBe(0);
-    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("pending");
     expect(outboxState.sales.find((s) => s.localId === "sale-2")?.status).toBe("pending");
     expect(createSaleMock).toHaveBeenCalledTimes(1);
   });
 
-  it("on error mid-loop (decrementStock throws), resets the failing sale to pending", async () => {
+  it("marks the sale as 'conflict' (not 'pending') when createSale throws an insufficient-stock error from create_sale_atomic", async () => {
     outboxState.sales = [makeSale({ localId: "sale-1" })];
-    decrementStockMock.mockRejectedValueOnce(new Error("network dropped"));
+    createSaleMock.mockRejectedValueOnce({ message: "ERROR: الكمية المتوفرة من منتج غير كافية" });
 
     const { syncOutbox } = await import("./syncManager");
     const result = await syncOutbox(FAKE_SUPABASE);
 
     expect(result.syncedCount).toBe(0);
-    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("pending");
-    expect(createSaleMock).not.toHaveBeenCalled();
-  });
-
-  it("marks the sale as 'partial' (not 'pending') when decrementStockForSale fully succeeds but createSale then throws — audit item #9", async () => {
-    outboxState.sales = [makeSale({ localId: "sale-1" })];
-    decrementStockMock.mockResolvedValue({ id: "p1", quantity: 4 });
-    createSaleMock.mockRejectedValueOnce(new Error("network dropped after stock RPC succeeded"));
-
-    const { syncOutbox } = await import("./syncManager");
-    const result = await syncOutbox(FAKE_SUPABASE);
-
-    expect(result.syncedCount).toBe(0);
-    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
-  });
-
-  it("marks the sale as 'partial' when the first line item's decrementStock succeeds but the second line item's throws mid-loop", async () => {
-    outboxState.sales = [makeSale({ localId: "sale-1", payload: TWO_ITEM_SALE_PAYLOAD })];
-    decrementStockMock
-      .mockResolvedValueOnce({ id: "p1", quantity: 7 })
-      .mockRejectedValueOnce(new Error("network dropped mid-loop, after item 1 succeeded"));
-
-    const { syncOutbox } = await import("./syncManager");
-    const result = await syncOutbox(FAKE_SUPABASE);
-
-    expect(result.syncedCount).toBe(0);
-    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
-    expect(decrementStockMock).toHaveBeenCalledTimes(2);
-    expect(createSaleMock).not.toHaveBeenCalled();
+    expect(result.conflictCount).toBe(1);
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("conflict");
   });
 
   it("treats a 23505 on sales_pkey from createSale as already-synced — audit item #10", async () => {
@@ -338,10 +326,9 @@ describe("syncOutbox — sales replay phase", () => {
     expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("synced");
     expect(outboxState.sales.find((s) => s.localId === "sale-2")?.status).toBe("synced");
     expect(createSaleMock).toHaveBeenCalledTimes(2);
-    expect(decrementStockMock).toHaveBeenCalledTimes(2);
   });
 
-  it("does NOT treat a 23505 on a DIFFERENT constraint (e.g. invoice_number collision) as already-synced — falls through to partial, audit item #10", async () => {
+  it("does NOT treat a 23505 on a DIFFERENT constraint (e.g. invoice_number collision) as already-synced — falls through to pending, audit item #10", async () => {
     outboxState.sales = [makeSale({ localId: "sale-1" })];
     createSaleMock.mockRejectedValueOnce({
       code: "23505",
@@ -352,10 +339,10 @@ describe("syncOutbox — sales replay phase", () => {
     const result = await syncOutbox(FAKE_SUPABASE);
 
     expect(result.syncedCount).toBe(0);
-    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("pending");
   });
 
-  it("a non-23505 error still falls through to the existing partial-marking logic unchanged (regression guard) — audit item #10", async () => {
+  it("a non-23505, non-insufficient-stock error still falls through to resetStaleSyncing/pending (regression guard)", async () => {
     outboxState.sales = [makeSale({ localId: "sale-1" })];
     createSaleMock.mockRejectedValueOnce({ code: "23503", message: "foreign key violation" });
 
@@ -363,7 +350,7 @@ describe("syncOutbox — sales replay phase", () => {
     const result = await syncOutbox(FAKE_SUPABASE);
 
     expect(result.syncedCount).toBe(0);
-    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("pending");
   });
 });
 
@@ -372,8 +359,6 @@ describe("syncOutbox — offline receipt vs. server total mismatch detection (au
     outboxState.sales = [];
     outboxState.held = [];
     createSaleMock.mockClear();
-    decrementStockMock.mockClear();
-    decrementStockMock.mockResolvedValue({ id: "p1", quantity: 5 });
   });
 
   it("does not flag priceMismatch when the offline total matches the server-recorded total exactly", async () => {

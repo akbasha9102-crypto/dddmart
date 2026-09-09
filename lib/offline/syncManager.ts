@@ -1,38 +1,41 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import { decrementStock, isUniqueViolation } from "@/services/products.service";
+import { isUniqueViolation } from "@/services/products.service";
 import { createSale } from "@/services/sales.service";
 import { holdSale } from "@/services/heldSales.service";
-import { toBaseUnits } from "@/lib/units";
 import { calculateTotals } from "@/types/pos";
 import { getHeldSalesOutbox, getOutbox, setHeldSalesOutbox, setOutbox } from "@/lib/offline/db";
 import {
   markConflict,
+  markHeldSaleConflict,
   markHeldSaleSynced,
   markHeldSaleSyncing,
-  markPartial,
   markPriceMismatch,
   markSynced,
   markSyncing,
   resetStaleHeldSyncing,
   resetStaleSyncing,
 } from "@/lib/offline/outbox";
-import type { PendingSale } from "@/types/offline";
 
 type Client = SupabaseClient<Database>;
 
 /**
- * Thrown by decrementStockForSale when a line item's decrementStock call
- * fails AFTER at least one earlier line item already succeeded (real stock
- * reduced for that earlier line, no way to know from here whether it's safe
- * to retry from scratch). Callers must treat this differently from a plain
- * throw on the FIRST line item, where nothing has been decremented yet and
- * the old "reset to pending, retry" behavior is still safe — see audit item #9.
+ * True for a Postgres exception raised by create_sale_atomic/hold_sale's
+ * insufficient-stock check (supabase/migrations/00000000000042_checkout_time_
+ * stock_decrement.sql / 00000000000043_hold_sale_stock_decrement.sql) —
+ * matched on the stable Arabic suffix both RPCs raise verbatim
+ * ('الكمية المتوفرة من % غير كافية'). Postgres prepends framing (e.g.
+ * "ERROR:") to a raised exception's message, so this is a substring match,
+ * not a full-string match — same pattern as isSalesPkeyViolation below.
  */
-class PartialStockDecrementError extends Error {
-  constructor(public readonly cause: unknown) {
-    super("stock partially decremented before a later line item failed");
-  }
+function isInsufficientStockError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof (err as { message?: unknown }).message === "string" &&
+    (err as { message: string }).message.includes("غير كافية")
+  );
 }
 
 /**
@@ -91,11 +94,13 @@ let isSyncing = false;
  * at a time — sequential on purpose: a just-reconnected link can be flaky,
  * and order must be preserved.
  *
- * For each pending sale, calls the exact same decrementStock/createSale
- * used by the online checkout path (services/products.service.ts,
- * services/sales.service.ts) — there is only one implementation of "how a
- * stock decrement is validated" or "how a sale is persisted", online or
- * replayed.
+ * For each pending sale, calls the exact same createSale used by the online
+ * checkout path (services/sales.service.ts) — there is only one
+ * implementation of "how a sale is persisted", online or replayed. There is
+ * no separate stock pre-flight step anymore: create_sale_atomic (called
+ * inside createSale) now does the stock check-and-decrement AND the
+ * sale/sale_items insert atomically, in one transaction — see
+ * supabase/migrations/00000000000042_checkout_time_stock_decrement.sql.
  */
 export async function syncOutbox(supabase: Client): Promise<SyncResult> {
   if (isSyncing) return { syncedCount: 0, conflictCount: 0, syncedHeldCount: 0 };
@@ -115,19 +120,7 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
       outbox = markSyncing(outbox, sale.localId);
       await setOutbox(outbox);
 
-      let stockDecremented = false;
-
       try {
-        const conflicts = await decrementStockForSale(supabase, sale);
-        stockDecremented = true;
-
-        if (conflicts.length > 0) {
-          outbox = markConflict(outbox, sale.localId, conflicts);
-          await setOutbox(outbox);
-          conflictCount += 1;
-          continue;
-        }
-
         const persisted = await createSale(
           supabase,
           {
@@ -178,7 +171,7 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
         // Treating ANY 23505 as "already synced" would risk silently
         // dropping a real sale that never actually saved. Only the PK
         // collision is unambiguous proof this exact sale succeeded — any
-        // other 23505 falls through to the existing partial/pending logic
+        // other 23505 falls through to the existing conflict/pending logic
         // below, same as before — see audit item #10.
         if (isSalesPkeyViolation(err)) {
           outbox = markSynced(outbox, sale.localId);
@@ -187,29 +180,42 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
           continue;
         }
 
-        // Unexpected error (e.g. network dropped mid-replay). Real stock
-        // may already have been decremented for this sale — either
-        // decrementStockForSale itself returned successfully (stockDecremented
-        // = true) and the failure happened in the later createSale call, or
-        // decrementStockForSale threw PartialStockDecrementError because an
-        // earlier line item succeeded before a later one failed mid-loop. In
-        // either case, blindly resetting to "pending" would re-run
-        // decrementStockForSale from scratch and decrement the same real
-        // stock a second time (audit item #9) — so mark "partial" instead so
-        // a human reviews it, and stop retrying it automatically. Only reset
-        // to "pending" (old item-8 behavior) when nothing was decremented
-        // yet, e.g. decrementStock threw on the very first line item.
-        const anyStockDecremented = stockDecremented || err instanceof PartialStockDecrementError;
-        outbox = anyStockDecremented ? markPartial(outbox, sale.localId) : resetStaleSyncing(outbox);
+        // An insufficient-stock exception from create_sale_atomic (see
+        // migration 42) — real business outcome, not a transient failure:
+        // between this sale being queued offline and now, the requested
+        // stock genuinely ran out (sold elsewhere, damaged, etc). Not safe
+        // (or useful) to blindly retry, so mark "conflict" for a human to
+        // reconcile, same status/reducer already used elsewhere in this
+        // file, and stop this phase.
+        if (isInsufficientStockError(err)) {
+          outbox = markConflict(outbox, sale.localId, undefined);
+          await setOutbox(outbox);
+          conflictCount += 1;
+          break;
+        }
+
+        // Any other error (network drop, unknown) resets this sale back to
+        // "pending" for a later retry. This is now ALWAYS safe, unlike
+        // before this migration: create_sale_atomic is one atomic Postgres
+        // transaction — the stock decrement and the sale/sale_items insert
+        // either both happen or neither does, so there is no more
+        // partial-decrement state that would make a blind retry unsafe (the
+        // old "partial" status/audit-item-#9 machinery this replaced is no
+        // longer produced by this loop — see markPartial's remaining
+        // doc/type comments for why the status itself is kept, not removed).
+        outbox = resetStaleSyncing(outbox);
         await setOutbox(outbox);
         break;
       }
     }
 
     // Held-sale (تعليق) replay runs AFTER sales replay above completes.
-    // Holding never touches stock (see types/offline.ts), so there's no
-    // conflict path here — just insert the snapshot row via the same
-    // holdSale() the online path uses.
+    // hold_sale now ALSO atomically reserves stock per line (see
+    // supabase/migrations/00000000000043_hold_sale_stock_decrement.sql), so
+    // — unlike before that migration — a held-sale replay CAN hit a genuine
+    // insufficient-stock conflict here, handled the same way as the sales
+    // loop above (markHeldSaleConflict instead of silently retrying
+    // forever).
     let heldOutbox = await getHeldSalesOutbox();
     const pendingHeld = heldOutbox
       .filter((sale) => sale.status === "pending")
@@ -249,7 +255,19 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
           continue;
         }
 
-        // Same handling as the sales loop above: reset this held sale
+        // An insufficient-stock exception from hold_sale (migration 43) —
+        // same reasoning as the sales loop's isInsufficientStockError branch
+        // above: a real business outcome, not safe to silently retry.
+        // markHeldSaleConflict already existed (previously unreachable, per
+        // its own doc comment, since holding never used to touch stock) —
+        // wired up here now that it can actually happen.
+        if (isInsufficientStockError(err)) {
+          heldOutbox = markHeldSaleConflict(heldOutbox, sale.localId);
+          await setHeldSalesOutbox(heldOutbox);
+          break;
+        }
+
+        // Any other error (network drop, unknown): reset this held sale
         // (marked "syncing" above) back to "pending" and stop this phase,
         // leaving remaining held sales pending for the next sync attempt.
         heldOutbox = resetStaleHeldSyncing(heldOutbox);
@@ -262,48 +280,4 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
   }
 
   return { syncedCount, conflictCount, syncedHeldCount };
-}
-
-/**
- * Decrements real stock for every line in an offline sale via the same
- * decrementStock RPC the online path uses. If a line fails (insufficient
- * real stock), the lines that already succeeded are NOT rolled back —
- * they're a legitimate sale of the stock that did exist; rolling back would
- * reintroduce the same race window this guards against. Returns the list of
- * lines that failed (empty = every line succeeded).
- *
- * If a later line item's decrementStock call throws (e.g. network dropped
- * mid-loop) AFTER an earlier line item already succeeded, this throws
- * PartialStockDecrementError instead of letting the raw error propagate, so
- * the caller can tell "some real stock was already decremented, do not
- * blindly retry from scratch" apart from a throw on the very first line
- * (nothing decremented yet, safe to treat as before) — see audit item #9.
- */
-async function decrementStockForSale(
-  supabase: Client,
-  sale: PendingSale,
-): Promise<{ productId: string; productName: string; requestedBaseUnits: number }[]> {
-  const conflicts: { productId: string; productName: string; requestedBaseUnits: number }[] = [];
-  let anyDecremented = false;
-
-  for (const item of sale.payload.items) {
-    const baseUnits = toBaseUnits(item.quantity, item.unitConversionFactor);
-    let updated: Awaited<ReturnType<typeof decrementStock>>;
-    try {
-      updated = await decrementStock(supabase, item.productId, baseUnits);
-    } catch (err) {
-      if (anyDecremented) {
-        throw new PartialStockDecrementError(err);
-      }
-      throw err;
-    }
-
-    if (!updated) {
-      conflicts.push({ productId: item.productId, productName: item.name, requestedBaseUnits: baseUnits });
-      break;
-    }
-    anyDecremented = true;
-  }
-
-  return conflicts;
 }

@@ -15,7 +15,7 @@ export interface CartItem {
   /** Cost price snapshotted at add-to-cart time — permanent once the sale is recorded, unaffected by later changes to the product's cost_price. */
   costPrice: number;
   quantity: number;
-  /** Stock remaining on hand immediately after this item was reserved (post-decrement), for display only — not used for any further stock arithmetic. */
+  /** Last-known stock at the moment this item was added to the cart — advisory only, not a live reservation; the server re-validates and does the real check-and-decrement at checkout/hold time (create_sale_atomic / hold_sale). For display only — not used for any further stock arithmetic. */
   availableStock: number;
   /** Name of the non-base unit sold (e.g. "كارتون"). Undefined means the product's base unit. */
   unitName?: string;

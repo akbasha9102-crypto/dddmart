@@ -33,6 +33,15 @@ export interface ResumedHeldSale {
  * (params.cashierId, not auth.uid()) — held sales are an intentionally
  * shared-till feature; this was audited separately and explicitly left
  * unchanged (see the migration header for details).
+ *
+ * As of supabase/migrations/00000000000043_hold_sale_stock_decrement.sql,
+ * hold_sale ALSO atomically reserves stock per line (row-locked
+ * check-and-decrement, same pattern as create_sale_atomic) — a held sale is
+ * now a real commitment, not just a price-resolved snapshot. This means a
+ * call to holdSale can now throw an insufficient-stock error where it never
+ * could before (e.g. 'الكمية المتوفرة من ... غير كافية') — callers must
+ * surface RPC errors from this function the same way they already do for
+ * checkout.
  */
 export async function holdSale(supabase: Client, params: HoldSaleParams, storeId: string): Promise<HeldSale> {
   const { data, error } = await supabase.rpc("hold_sale", {
@@ -69,16 +78,36 @@ export async function listHeldSales(supabase: Client): Promise<HeldSale[]> {
 }
 
 /**
- * Deletes a held sale and returns its items/discount for the caller to load
- * into the active cart. Single round trip via delete().select().single(),
+ * Deletes a held sale, releases the stock hold_sale reserved for it (see
+ * supabase/migrations/00000000000043_hold_sale_stock_decrement.sql), and
+ * returns its items/discount for the caller to load into the active cart.
+ * Row deleted/fetched in a single round trip via delete().select().single(),
  * matching this repo's insert().select().single() convention elsewhere.
- * No stock action needed — items go back into the cart exactly as reserved.
+ *
+ * The release step mirrors cancelHeldSale's existing incrementStock-per-line
+ * pattern below: hold_sale now genuinely decrements products.quantity per
+ * line at hold time, so resuming a held sale back into the active cart must
+ * give that reservation back — otherwise the resumed cart's later checkout
+ * (createSale -> create_sale_atomic) would decrement the exact same stock a
+ * second time. This release-then-later-redecrement is intentionally NOT one
+ * atomic transaction with the resume itself (nor with the eventual
+ * checkout) — same non-atomic pattern cancelHeldSale already uses
+ * successfully in production; acceptable, small blast radius (a crash
+ * between these two steps just leaves stock slightly over-available for a
+ * moment, never under, and never silently lost).
  */
 export async function resumeHeldSale(supabase: Client, id: string): Promise<ResumedHeldSale> {
   const { data, error } = await supabase.from("held_sales").delete().eq("id", id).select().single();
   if (error) throw error;
+
+  const items = data.items as unknown as CartItem[];
+
+  await Promise.all(
+    items.map((item) => incrementStock(supabase, item.productId, toBaseUnits(item.quantity, item.unitConversionFactor))),
+  );
+
   return {
-    items: data.items as unknown as CartItem[],
+    items,
     discountAmount: data.discount_amount,
   };
 }

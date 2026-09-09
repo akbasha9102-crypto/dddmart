@@ -268,7 +268,7 @@ describe("listHeldSales", () => {
 
 describe("resumeHeldSale", () => {
   it("calls delete().eq(id) and returns items/discountAmount parsed from the returned row", async () => {
-    const { supabase, deleteEqSpy } = createFakeSupabase({ deletedRow: HELD_ROW });
+    const { supabase, deleteEqSpy } = createFakeSupabase({ deletedRow: HELD_ROW, rpcData: [RESTORED_PRODUCT] });
 
     const result = await resumeHeldSale(supabase, "held-1");
 
@@ -276,6 +276,44 @@ describe("resumeHeldSale", () => {
     expect(result).toEqual({
       items: CART_ITEMS,
       discountAmount: 1.5,
+    });
+  });
+
+  it("releases stock via incrementStock once per line item with the base-unit-converted quantity — migration 43", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase({ deletedRow: HELD_ROW, rpcData: [RESTORED_PRODUCT] });
+
+    await resumeHeldSale(supabase, "held-1");
+
+    expect(rpcSpy).toHaveBeenCalledWith("adjust_product_stock", {
+      p_product_id: "product-1",
+      p_delta: 3,
+    });
+  });
+
+  it("converts quantity to base units per line before releasing stock", async () => {
+    const heldRowWithUnit: HeldSale = {
+      ...HELD_ROW,
+      items: [
+        {
+          productId: "product-1",
+          name: "علبة علك",
+          barcode: "1111",
+          unitPrice: 2,
+          costPrice: 1,
+          quantity: 2,
+          availableStock: 47,
+          unitName: "كارتون",
+          unitConversionFactor: 24,
+        },
+      ] as unknown as Record<string, unknown>[],
+    };
+    const { supabase, rpcSpy } = createFakeSupabase({ deletedRow: heldRowWithUnit, rpcData: [RESTORED_PRODUCT] });
+
+    await resumeHeldSale(supabase, "held-1");
+
+    expect(rpcSpy).toHaveBeenCalledWith("adjust_product_stock", {
+      p_product_id: "product-1",
+      p_delta: 48,
     });
   });
 });

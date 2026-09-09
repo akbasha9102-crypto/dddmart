@@ -171,9 +171,12 @@ function dayKeyOf(value: string | Date): string {
  * the client-trusted-price vulnerability the old direct-insert path had
  * (see supabase/migrations/00000000000027_atomic_sale_recording.sql).
  *
- * Stock is not touched here — it's decremented atomically at add-to-cart
- * time instead (see services/products.service.ts#decrementStock /
- * hooks/usePOS.ts#addProductToCart).
+ * Stock is decremented atomically inside create_sale_atomic itself, as part
+ * of the same RPC call/transaction that inserts sales/sale_items — not at
+ * add-to-cart time (see supabase/migrations/00000000000042_checkout_time_
+ * stock_decrement.sql). If any line's stock is insufficient, the RPC raises
+ * and the whole call (including every other line's decrement and the
+ * sale/sale_items insert) rolls back together.
  *
  * The client-side checks below (empty cart, credit-requires-customer,
  * discount bounds) are cheap pre-flight feedback only — the RPC re-validates

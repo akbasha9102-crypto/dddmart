@@ -60,29 +60,3 @@ export function resolveBarcodeOffline(
 
   return { kind: "unit", product: unitProduct, unit };
 }
-
-/**
- * Applies a base-unit stock delta to the cached product list and persists
- * it, mirroring what decrementStock/incrementStock do server-side via the
- * adjust_product_stock RPC — used while offline so the cart's view of stock
- * stays consistent across multiple offline add/remove operations. Returns
- * the updated product, or null if it isn't in the cache or the delta would
- * push quantity below zero.
- */
-export async function applyLocalStockDelta(productId: string, baseUnitsDelta: number): Promise<ProductWithCategory | null> {
-  const products = await getCachedProducts();
-  let updated: ProductWithCategory | null = null;
-
-  const next = products.map((product) => {
-    if (product.id !== productId) return product;
-    const newQuantity = product.quantity + baseUnitsDelta;
-    if (newQuantity < 0) return product;
-    updated = { ...product, quantity: newQuantity };
-    return updated;
-  });
-
-  if (!updated) return null;
-
-  await setCachedProducts(next);
-  return updated;
-}
