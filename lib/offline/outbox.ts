@@ -26,6 +26,10 @@ export function markSyncing(outbox: PendingSale[], localId: string): PendingSale
   return outbox.map((sale) => (sale.localId === localId ? { ...sale, status: "syncing" as const } : sale));
 }
 
+export function resetStaleSyncing(outbox: PendingSale[]): PendingSale[] {
+  return outbox.map((sale) => (sale.status === "syncing" ? { ...sale, status: "pending" as const } : sale));
+}
+
 /** Oldest by createdAt with status "pending" — FIFO replay order. */
 export function nextPendingSale(outbox: PendingSale[]): PendingSale | undefined {
   return outbox
@@ -65,6 +69,10 @@ export function markHeldSaleSyncing(outbox: PendingHeldSale[], localId: string):
   return outbox.map((sale) => (sale.localId === localId ? { ...sale, status: "syncing" as const } : sale));
 }
 
+export function resetStaleHeldSyncing(outbox: PendingHeldSale[]): PendingHeldSale[] {
+  return outbox.map((sale) => (sale.status === "syncing" ? { ...sale, status: "pending" as const } : sale));
+}
+
 /** Oldest by createdAt with status "pending" — FIFO replay order. */
 export function nextPendingHeldSale(outbox: PendingHeldSale[]): PendingHeldSale | undefined {
   return outbox
@@ -88,4 +96,14 @@ export async function getPendingHeldSales(): Promise<PendingHeldSale[]> {
 export async function removePendingHeldSale(localId: string): Promise<void> {
   const outbox = await getHeldSalesOutbox();
   await setHeldSalesOutbox(removeHeldSale(outbox, localId));
+}
+
+export async function resetStaleSyncingSales(): Promise<void> {
+  const outbox = await getOutbox();
+  await setOutbox(resetStaleSyncing(outbox));
+}
+
+export async function resetStaleSyncingHeldSales(): Promise<void> {
+  const outbox = await getHeldSalesOutbox();
+  await setHeldSalesOutbox(resetStaleHeldSyncing(outbox));
 }

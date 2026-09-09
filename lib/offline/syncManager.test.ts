@@ -131,7 +131,7 @@ describe("syncOutbox — held-sale replay phase", () => {
     expect(outboxState.held.find((s) => s.localId === "held-1")?.status).toBe("synced");
   });
 
-  it("on error mid-loop, leaves the failing and remaining held sales pending", async () => {
+  it("on error mid-loop, resets the failing held sale to pending and leaves remaining held sales pending", async () => {
     const first = makeHeldSale({ localId: "held-1", createdAt: "2026-08-07T09:00:00.000Z" });
     const second = makeHeldSale({ localId: "held-2", createdAt: "2026-08-07T10:00:00.000Z" });
     outboxState.held = [first, second];
@@ -141,7 +141,7 @@ describe("syncOutbox — held-sale replay phase", () => {
     const result = await syncOutbox(FAKE_SUPABASE);
 
     expect(result.syncedHeldCount).toBe(0);
-    expect(outboxState.held.find((s) => s.localId === "held-1")?.status).toBe("syncing");
+    expect(outboxState.held.find((s) => s.localId === "held-1")?.status).toBe("pending");
     expect(outboxState.held.find((s) => s.localId === "held-2")?.status).toBe("pending");
     expect(holdSaleMock).toHaveBeenCalledTimes(1);
   });
@@ -165,5 +165,45 @@ describe("syncOutbox — held-sale replay phase", () => {
     await syncOutbox(FAKE_SUPABASE);
 
     expect(calls).toEqual(["createSale", "holdSale"]);
+  });
+});
+
+describe("syncOutbox — sales replay phase", () => {
+  beforeEach(() => {
+    outboxState.sales = [];
+    outboxState.held = [];
+    createSaleMock.mockClear();
+    decrementStockMock.mockClear();
+    holdSaleMock.mockClear();
+    createSaleMock.mockResolvedValue({});
+    decrementStockMock.mockResolvedValue({ id: "p1", quantity: 5 });
+    holdSaleMock.mockResolvedValue({});
+  });
+
+  it("on error mid-loop (createSale throws), resets the failing sale to pending and leaves remaining sales pending", async () => {
+    const first = makeSale({ localId: "sale-1", createdAt: "2026-08-07T09:00:00.000Z" });
+    const second = makeSale({ localId: "sale-2", createdAt: "2026-08-07T10:00:00.000Z" });
+    outboxState.sales = [first, second];
+    createSaleMock.mockRejectedValueOnce(new Error("network dropped"));
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(0);
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("pending");
+    expect(outboxState.sales.find((s) => s.localId === "sale-2")?.status).toBe("pending");
+    expect(createSaleMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("on error mid-loop (decrementStock throws), resets the failing sale to pending", async () => {
+    outboxState.sales = [makeSale({ localId: "sale-1" })];
+    decrementStockMock.mockRejectedValueOnce(new Error("network dropped"));
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(0);
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("pending");
+    expect(createSaleMock).not.toHaveBeenCalled();
   });
 });

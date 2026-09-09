@@ -5,7 +5,15 @@ import { createSale } from "@/services/sales.service";
 import { holdSale } from "@/services/heldSales.service";
 import { toBaseUnits } from "@/lib/units";
 import { getHeldSalesOutbox, getOutbox, setHeldSalesOutbox, setOutbox } from "@/lib/offline/db";
-import { markConflict, markHeldSaleSynced, markHeldSaleSyncing, markSynced, markSyncing } from "@/lib/offline/outbox";
+import {
+  markConflict,
+  markHeldSaleSynced,
+  markHeldSaleSyncing,
+  markSynced,
+  markSyncing,
+  resetStaleHeldSyncing,
+  resetStaleSyncing,
+} from "@/lib/offline/outbox";
 import type { PendingSale } from "@/types/offline";
 
 type Client = SupabaseClient<Database>;
@@ -74,8 +82,11 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
         syncedCount += 1;
       } catch {
         // Unexpected error (e.g. network dropped mid-replay): stop the
-        // whole run, leave this sale (and everything after it) pending so
-        // the next online event or manual retry resumes from here.
+        // whole run, reset this sale (marked "syncing" above) back to
+        // "pending" so the next online event or manual retry resumes from
+        // here instead of leaving it stuck forever — see audit item #8.
+        outbox = resetStaleSyncing(outbox);
+        await setOutbox(outbox);
         break;
       }
     }
@@ -109,8 +120,11 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
         await setHeldSalesOutbox(heldOutbox);
         syncedHeldCount += 1;
       } catch {
-        // Same handling as the sales loop above: stop this phase, leave
-        // remaining held sales pending for the next sync attempt.
+        // Same handling as the sales loop above: reset this held sale
+        // (marked "syncing" above) back to "pending" and stop this phase,
+        // leaving remaining held sales pending for the next sync attempt.
+        heldOutbox = resetStaleHeldSyncing(heldOutbox);
+        await setHeldSalesOutbox(heldOutbox);
         break;
       }
     }

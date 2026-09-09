@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { syncOutbox } from "@/lib/offline/syncManager";
 import { getHeldSalesOutbox, getOutbox } from "@/lib/offline/db";
+import { resetStaleSyncingHeldSales, resetStaleSyncingSales } from "@/lib/offline/outbox";
 import { refreshProductCache } from "@/lib/offline/productCache";
 
 interface OfflineContextValue {
@@ -40,7 +41,13 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   }, [refreshCounts]);
 
   useEffect(() => {
-    void refreshCounts();
+    void (async () => {
+      // Recover any entry a crashed/closed previous session left stuck on
+      // "syncing" (no other code path resets it — see audit item #8).
+      await resetStaleSyncingSales();
+      await resetStaleSyncingHeldSales();
+      await refreshCounts();
+    })();
   }, [refreshCounts]);
 
   useEffect(() => {

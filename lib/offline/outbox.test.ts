@@ -11,6 +11,8 @@ import {
   nextPendingHeldSale,
   nextPendingSale,
   removeHeldSale,
+  resetStaleHeldSyncing,
+  resetStaleSyncing,
 } from "./outbox";
 import type { PendingHeldSale, PendingSale } from "@/types/offline";
 
@@ -80,6 +82,47 @@ describe("markSyncing", () => {
     const result = markSyncing(outbox, "local-2");
     expect(result[0]?.status).toBe("pending");
     expect(result[1]?.status).toBe("syncing");
+  });
+});
+
+describe("resetStaleSyncing", () => {
+  it("flips a syncing sale back to pending", () => {
+    const outbox = [makeSale({ localId: "local-1", status: "syncing" })];
+    const result = resetStaleSyncing(outbox);
+    expect(result[0]?.status).toBe("pending");
+  });
+
+  it("leaves non-syncing sales untouched", () => {
+    const outbox = [
+      makeSale({ localId: "local-1", status: "synced" }),
+      makeSale({ localId: "local-2", status: "conflict" }),
+      makeSale({ localId: "local-3", status: "pending" }),
+    ];
+    const result = resetStaleSyncing(outbox);
+    expect(result.map((s) => s.status)).toEqual(["synced", "conflict", "pending"]);
+  });
+
+  it("does not mutate the original array", () => {
+    const outbox = [makeSale({ localId: "local-1", status: "syncing" })];
+    resetStaleSyncing(outbox);
+    expect(outbox[0]?.status).toBe("syncing");
+  });
+});
+
+describe("resetStaleHeldSyncing", () => {
+  it("flips a syncing held sale back to pending", () => {
+    const outbox = [makeHeldSale({ localId: "held-local-1", status: "syncing" })];
+    const result = resetStaleHeldSyncing(outbox);
+    expect(result[0]?.status).toBe("pending");
+  });
+
+  it("leaves non-syncing held sales untouched", () => {
+    const outbox = [
+      makeHeldSale({ localId: "held-local-1", status: "synced" }),
+      makeHeldSale({ localId: "held-local-2", status: "pending" }),
+    ];
+    const result = resetStaleHeldSyncing(outbox);
+    expect(result.map((s) => s.status)).toEqual(["synced", "pending"]);
   });
 });
 
