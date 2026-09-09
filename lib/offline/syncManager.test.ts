@@ -56,6 +56,16 @@ function makeSale(overrides: Partial<PendingSale> = {}): PendingSale {
   };
 }
 
+const TWO_ITEM_SALE_PAYLOAD: PendingSale["payload"] = {
+  items: [
+    { productId: "p1", name: "منتج 1", barcode: "1111", unitPrice: 10, costPrice: 6, quantity: 1, availableStock: 8 },
+    { productId: "p2", name: "منتج 2", barcode: "2222", unitPrice: 20, costPrice: 12, quantity: 1, availableStock: 4 },
+  ],
+  discountAmount: 0,
+  paidAmount: 30,
+  cashierId: "cashier-1",
+};
+
 const BASE_HELD_ITEMS: PendingHeldSale["items"] = [
   { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 10, costPrice: 6, quantity: 1, availableStock: 8 },
 ];
@@ -180,7 +190,7 @@ describe("syncOutbox — sales replay phase", () => {
     holdSaleMock.mockResolvedValue({});
   });
 
-  it("on error mid-loop (createSale throws), resets the failing sale to pending and leaves remaining sales pending", async () => {
+  it("on error mid-loop (createSale throws after stock was already decremented), marks the failing sale partial and leaves the rest pending — audit item #9", async () => {
     const first = makeSale({ localId: "sale-1", createdAt: "2026-08-07T09:00:00.000Z" });
     const second = makeSale({ localId: "sale-2", createdAt: "2026-08-07T10:00:00.000Z" });
     outboxState.sales = [first, second];
@@ -190,7 +200,7 @@ describe("syncOutbox — sales replay phase", () => {
     const result = await syncOutbox(FAKE_SUPABASE);
 
     expect(result.syncedCount).toBe(0);
-    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("pending");
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
     expect(outboxState.sales.find((s) => s.localId === "sale-2")?.status).toBe("pending");
     expect(createSaleMock).toHaveBeenCalledTimes(1);
   });
@@ -204,6 +214,33 @@ describe("syncOutbox — sales replay phase", () => {
 
     expect(result.syncedCount).toBe(0);
     expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("pending");
+    expect(createSaleMock).not.toHaveBeenCalled();
+  });
+
+  it("marks the sale as 'partial' (not 'pending') when decrementStockForSale fully succeeds but createSale then throws — audit item #9", async () => {
+    outboxState.sales = [makeSale({ localId: "sale-1" })];
+    decrementStockMock.mockResolvedValue({ id: "p1", quantity: 4 });
+    createSaleMock.mockRejectedValueOnce(new Error("network dropped after stock RPC succeeded"));
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(0);
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
+  });
+
+  it("marks the sale as 'partial' when the first line item's decrementStock succeeds but the second line item's throws mid-loop", async () => {
+    outboxState.sales = [makeSale({ localId: "sale-1", payload: TWO_ITEM_SALE_PAYLOAD })];
+    decrementStockMock
+      .mockResolvedValueOnce({ id: "p1", quantity: 7 })
+      .mockRejectedValueOnce(new Error("network dropped mid-loop, after item 1 succeeded"));
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(0);
+    expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
+    expect(decrementStockMock).toHaveBeenCalledTimes(2);
     expect(createSaleMock).not.toHaveBeenCalled();
   });
 });

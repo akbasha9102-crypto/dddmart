@@ -6,6 +6,7 @@ import {
   markHeldSaleConflict,
   markHeldSaleSynced,
   markHeldSaleSyncing,
+  markPartial,
   markSynced,
   markSyncing,
   nextPendingHeldSale,
@@ -133,6 +134,26 @@ describe("markConflict", () => {
     const result = markConflict(outbox, "local-1", conflicts);
     expect(result[0]?.status).toBe("conflict");
     expect(result[0]?.conflicts).toEqual(conflicts);
+  });
+});
+
+describe("markPartial", () => {
+  it("sets status to partial on only the matching sale", () => {
+    const outbox = [makeSale({ localId: "local-1" }), makeSale({ localId: "local-2" })];
+    const result = markPartial(outbox, "local-1");
+    expect(result[0]?.status).toBe("partial");
+    expect(result[1]?.status).toBe("pending");
+  });
+
+  it("does not mutate the original array", () => {
+    const outbox = [makeSale({ localId: "local-1" })];
+    markPartial(outbox, "local-1");
+    expect(outbox[0]?.status).toBe("pending");
+  });
+
+  it("returns the outbox unchanged when the id is not found", () => {
+    const outbox = [makeSale({ localId: "local-1" })];
+    expect(markPartial(outbox, "does-not-exist")).toEqual(outbox);
   });
 });
 

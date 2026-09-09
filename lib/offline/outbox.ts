@@ -22,6 +22,18 @@ export function markConflict(outbox: PendingSale[], localId: string, conflicts: 
   );
 }
 
+/**
+ * Marks a sale "partial": real stock was already decremented (fully or for
+ * some line items) but the sale record itself was never persisted, and it's
+ * no longer safe to auto-retry (retrying would decrement the same stock
+ * again). Unlike markConflict, there's no extra per-line detail to attach —
+ * the whole point is that we don't know the exact state, a human needs to
+ * look. See audit item #9.
+ */
+export function markPartial(outbox: PendingSale[], localId: string): PendingSale[] {
+  return outbox.map((sale) => (sale.localId === localId ? { ...sale, status: "partial" as const } : sale));
+}
+
 export function markSyncing(outbox: PendingSale[], localId: string): PendingSale[] {
   return outbox.map((sale) => (sale.localId === localId ? { ...sale, status: "syncing" as const } : sale));
 }

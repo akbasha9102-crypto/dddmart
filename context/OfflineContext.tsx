@@ -13,6 +13,7 @@ interface OfflineContextValue {
   isOnline: boolean;
   pendingCount: number;
   conflictCount: number;
+  partialCount: number;
   pendingHeldCount: number;
   syncNow: () => Promise<void>;
 }
@@ -24,12 +25,14 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   const { isOnline } = useOnlineStatus();
   const [pendingCount, setPendingCount] = useState(0);
   const [conflictCount, setConflictCount] = useState(0);
+  const [partialCount, setPartialCount] = useState(0);
   const [pendingHeldCount, setPendingHeldCount] = useState(0);
 
   const refreshCounts = useCallback(async () => {
     const outbox = await getOutbox();
     setPendingCount(outbox.filter((sale) => sale.status === "pending" || sale.status === "syncing").length);
     setConflictCount(outbox.filter((sale) => sale.status === "conflict").length);
+    setPartialCount(outbox.filter((sale) => sale.status === "partial").length);
     const heldOutbox = await getHeldSalesOutbox();
     setPendingHeldCount(heldOutbox.filter((sale) => sale.status === "pending" || sale.status === "syncing").length);
   }, []);
@@ -58,7 +61,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   }, [isOnline, syncNow]);
 
   return (
-    <OfflineContext.Provider value={{ isOnline, pendingCount, conflictCount, pendingHeldCount, syncNow }}>
+    <OfflineContext.Provider value={{ isOnline, pendingCount, conflictCount, partialCount, pendingHeldCount, syncNow }}>
       {children}
     </OfflineContext.Provider>
   );

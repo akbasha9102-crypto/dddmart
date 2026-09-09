@@ -16,7 +16,8 @@ export interface PendingStockOp {
 export interface PendingSale {
   /** Client-generated id (crypto.randomUUID()), used as the outbox key and as the sale's id when synced. */
   localId: string;
-  status: "pending" | "syncing" | "conflict" | "synced";
+  /** "partial" = decrementStockForSale succeeded (real stock reduced, possibly only partway through the line items) but the sale record itself was never persisted — see lib/offline/syncManager.ts's PartialStockDecrementError and audit item #9. Distinct from "conflict" (insufficient stock is a normal business outcome); "partial" means the outbox can no longer safely auto-retry and needs a human to reconcile stock. */
+  status: "pending" | "syncing" | "conflict" | "synced" | "partial";
   createdAt: string; // ISO, used for FIFO replay order and receipt display
   payload: CheckoutPayload;
   invoiceNumber: string; // generated locally at checkout time so the receipt can show it immediately

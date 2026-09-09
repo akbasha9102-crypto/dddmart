@@ -10,10 +10,10 @@ import { OfflineConflictModal } from "@/components/features/pos/OfflineConflictM
  * conflicts) so it adds zero visual noise during regular operation.
  */
 export function OfflineBanner() {
-  const { isOnline, pendingCount, conflictCount } = useOfflineContext();
+  const { isOnline, pendingCount, conflictCount, partialCount } = useOfflineContext();
   const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
 
-  if (isOnline && pendingCount === 0 && conflictCount === 0) {
+  if (isOnline && pendingCount === 0 && conflictCount === 0 && partialCount === 0) {
     return null;
   }
 
@@ -33,6 +33,22 @@ export function OfflineBanner() {
       <div className="rounded-lg bg-blue-100 px-4 py-2 text-sm text-blue-800">
         جارٍ مزامنة {pendingCount} عملية بيع معلّقة...
       </div>
+    );
+  }
+
+  if (partialCount > 0) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setIsConflictModalOpen(true)}
+          className="w-full rounded-lg bg-red-200 px-4 py-2 text-right text-sm font-semibold text-red-900 underline-offset-2 hover:underline"
+        >
+          تنبيه: {partialCount} عملية بيع خُصم مخزونها فعلياً دون تسجيل الفاتورة — يتطلب مراجعة يدوية فورية للمخزون
+          {conflictCount > 0 ? ` (بالإضافة إلى ${conflictCount} عملية تعذرت بسبب نقص المخزون)` : ""}
+        </button>
+        <OfflineConflictModal open={isConflictModalOpen} onClose={() => setIsConflictModalOpen(false)} />
+      </>
     );
   }
 
