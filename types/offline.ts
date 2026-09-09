@@ -24,6 +24,21 @@ export interface PendingSale {
   /** The cashier's store_id at the moment this sale was queued (AuthContext, cached from the last online session) — replayed as-is by syncManager.ts, not re-resolved from "whoever happens to be online now". */
   storeId: string;
   conflicts?: { productId: string; productName: string; requestedBaseUnits: number }[];
+  /**
+   * Set only when this sale synced successfully (status stays "synced" — the
+   * server recorded it correctly and it needs no retry/reconciliation) but
+   * the total the offline receipt showed the cashier/customer, computed from
+   * the locally cached product prices at checkout time, differs from the
+   * server-authoritative total_amount that create_sale_atomic actually
+   * recorded (it always recomputes price/total server-side from the live
+   * products table, ignoring any client-sent price — see audit item #3).
+   * This is a loss-prevention/reporting signal only: it does not mean the
+   * sale itself is broken, incomplete, or needs retrying — the recorded
+   * amount is correct and final. A human should review whether the
+   * discrepancy was honest price staleness or a cashier undercharging a
+   * customer while the till/receipt showed a different (lower) amount.
+   */
+  priceMismatch?: { offlineTotal: number; serverTotal: number };
 }
 
 /**

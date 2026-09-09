@@ -4,12 +4,14 @@ import { decrementStock, isUniqueViolation } from "@/services/products.service";
 import { createSale } from "@/services/sales.service";
 import { holdSale } from "@/services/heldSales.service";
 import { toBaseUnits } from "@/lib/units";
+import { calculateTotals } from "@/types/pos";
 import { getHeldSalesOutbox, getOutbox, setHeldSalesOutbox, setOutbox } from "@/lib/offline/db";
 import {
   markConflict,
   markHeldSaleSynced,
   markHeldSaleSyncing,
   markPartial,
+  markPriceMismatch,
   markSynced,
   markSyncing,
   resetStaleHeldSyncing,
@@ -126,7 +128,7 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
           continue;
         }
 
-        await createSale(
+        const persisted = await createSale(
           supabase,
           {
             ...sale.payload,
@@ -135,6 +137,25 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
           },
           sale.storeId,
         );
+
+        // Audit item #3: the offline receipt shown to the cashier/customer
+        // was computed from the locally cached (possibly stale, or
+        // DevTools-tampered — separately closed, out of scope) product
+        // price via the same calculateTotals() the online checkout UI
+        // uses. create_sale_atomic (called inside createSale above) always
+        // recomputes price/total server-side from the live products table
+        // and ignores this offline total entirely for the actual charge —
+        // so the recorded sale.total_amount is always correct. This is
+        // purely a detection step to flag when the two numbers diverged,
+        // for human review (honest staleness vs. a cashier undercharging a
+        // customer). 0.01 tolerance matches total_amount's numeric(12,2)
+        // column — never more than 2 decimal places server-side, so any
+        // gap beyond a cent is a genuine mismatch, not float noise.
+        const offlineTotal = calculateTotals(sale.payload.items, sale.payload.discountAmount).totalAmount;
+        const serverTotal = persisted.sale.total_amount;
+        if (Math.abs(offlineTotal - serverTotal) > 0.01) {
+          outbox = markPriceMismatch(outbox, sale.localId, { offlineTotal, serverTotal });
+        }
 
         outbox = markSynced(outbox, sale.localId);
         await setOutbox(outbox);

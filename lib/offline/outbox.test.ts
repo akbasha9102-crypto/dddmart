@@ -7,6 +7,7 @@ import {
   markHeldSaleSynced,
   markHeldSaleSyncing,
   markPartial,
+  markPriceMismatch,
   markSynced,
   markSyncing,
   nextPendingHeldSale,
@@ -154,6 +155,23 @@ describe("markPartial", () => {
   it("returns the outbox unchanged when the id is not found", () => {
     const outbox = [makeSale({ localId: "local-1" })];
     expect(markPartial(outbox, "does-not-exist")).toEqual(outbox);
+  });
+});
+
+describe("markPriceMismatch", () => {
+  it("attaches priceMismatch to the matching sale by localId without changing its status", () => {
+    const existing = [makeSale({ localId: "local-1", status: "synced" })];
+    const result = markPriceMismatch(existing, "local-1", { offlineTotal: 10, serverTotal: 15 });
+
+    expect(result[0]?.status).toBe("synced");
+    expect(result[0]?.priceMismatch).toEqual({ offlineTotal: 10, serverTotal: 15 });
+  });
+
+  it("leaves non-matching sales unchanged", () => {
+    const existing = [makeSale({ localId: "local-1" }), makeSale({ localId: "local-2" })];
+    const result = markPriceMismatch(existing, "local-1", { offlineTotal: 10, serverTotal: 15 });
+
+    expect(result[1]?.priceMismatch).toBeUndefined();
   });
 });
 

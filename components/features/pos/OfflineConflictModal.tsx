@@ -23,10 +23,16 @@ interface OfflineConflictModalProps {
  * conflicts since they represent a more urgent, less-understood risk
  * (possible unrecorded sale with real stock/money impact, not just a
  * routine stock shortfall) and shouldn't be visually conflated with them.
+ * Also lists sales whose offline receipt total differed from what actually
+ * got recorded once synced ('priceMismatch') — unlike the other two
+ * sections, these sales synced successfully and correctly; this is a
+ * review-only signal, not a sync failure, styled separately (amber, not
+ * red) to avoid implying otherwise.
  */
 export function OfflineConflictModal({ open, onClose }: OfflineConflictModalProps) {
   const [conflicts, setConflicts] = useState<PendingSale[]>([]);
   const [partials, setPartials] = useState<PendingSale[]>([]);
+  const [priceMismatches, setPriceMismatches] = useState<PendingSale[]>([]);
   const [acknowledgedIds, setAcknowledgedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -34,16 +40,18 @@ export function OfflineConflictModal({ open, onClose }: OfflineConflictModalProp
     void getOutbox().then((outbox) => {
       setConflicts(outbox.filter((sale) => sale.status === "conflict"));
       setPartials(outbox.filter((sale) => sale.status === "partial"));
+      setPriceMismatches(outbox.filter((sale) => sale.priceMismatch !== undefined));
     });
   }, [open]);
 
   const visibleConflicts = conflicts.filter((sale) => !acknowledgedIds.has(sale.localId));
   const visiblePartials = partials.filter((sale) => !acknowledgedIds.has(sale.localId));
+  const visiblePriceMismatches = priceMismatches.filter((sale) => !acknowledgedIds.has(sale.localId));
 
   return (
     <Modal open={open} onClose={onClose} title="عمليات بيع تعذرت مزامنتها">
       <div className="flex max-h-96 flex-col gap-3 overflow-y-auto">
-        {visiblePartials.length === 0 && visibleConflicts.length === 0 ? (
+        {visiblePartials.length === 0 && visibleConflicts.length === 0 && visiblePriceMismatches.length === 0 ? (
           <p className="text-center text-gray-400">لا توجد عمليات معلّقة</p>
         ) : (
           <>
@@ -101,6 +109,35 @@ export function OfflineConflictModal({ open, onClose }: OfflineConflictModalProp
                 </Button>
               </div>
             ))}
+            {visiblePriceMismatches.length > 0 ? (
+              <div className="flex flex-col gap-3">
+                <p className="text-xs font-semibold text-amber-900">
+                  عمليات بيع تمت مزامنتها بنجاح والمبلغ المسجّل صحيح ونهائي — لكن يستحق مراجعة الفرق مع ما ظهر على الفاتورة وقت البيع
+                </p>
+                {visiblePriceMismatches.map((sale) => (
+                  <div key={sale.localId} className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+                    <p className="font-semibold text-gray-900">فاتورة {sale.invoiceNumber}</p>
+                    <p className="mt-1 text-amber-900">
+                      تمت مزامنة هذه الفاتورة بنجاح والمبلغ المسجّل في النظام هو الصحيح والمعتمد، لكن المبلغ الذي ظهر
+                      على الفاتورة عند الزبون أثناء العمل دون اتصال كان مختلفاً — يُحتمل أن الزبون دُفع مبلغ مختلف عن
+                      المسجّل، يرجى المراجعة اليدوية
+                    </p>
+                    <p className="mt-2 text-gray-600">
+                      المبلغ الظاهر على الفاتورة وقت البيع: {sale.priceMismatch?.offlineTotal.toFixed(2)} — المبلغ
+                      المسجّل فعلياً: {sale.priceMismatch?.serverTotal.toFixed(2)}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="mt-2"
+                      onClick={() => setAcknowledgedIds((prev) => new Set(prev).add(sale.localId))}
+                    >
+                      تم الاطلاع
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </>
         )}
       </div>

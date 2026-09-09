@@ -16,6 +16,21 @@ export function markSynced(outbox: PendingSale[], localId: string): PendingSale[
   return outbox.map((sale) => (sale.localId === localId ? { ...sale, status: "synced" as const } : sale));
 }
 
+/**
+ * Attaches a priceMismatch flag to an already-"synced" sale — see audit
+ * item #3 and types/offline.ts. Deliberately does NOT change `status`: the
+ * sale synced correctly and needs no retry/reconciliation, so status stays
+ * "synced". This only adds an independent reporting fact for
+ * OfflineConflictModal to surface.
+ */
+export function markPriceMismatch(
+  outbox: PendingSale[],
+  localId: string,
+  priceMismatch: NonNullable<PendingSale["priceMismatch"]>,
+): PendingSale[] {
+  return outbox.map((sale) => (sale.localId === localId ? { ...sale, priceMismatch } : sale));
+}
+
 export function markConflict(outbox: PendingSale[], localId: string, conflicts: PendingSale["conflicts"]): PendingSale[] {
   return outbox.map((sale) =>
     sale.localId === localId ? { ...sale, status: "conflict" as const, conflicts } : sale,

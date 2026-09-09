@@ -228,7 +228,7 @@ describe("syncOutbox — held-sale replay phase", () => {
     const calls: string[] = [];
     createSaleMock.mockImplementation(async () => {
       calls.push("createSale");
-      return {};
+      return { sale: { total_amount: 10 }, items: [], changeAmount: 0 };
     });
     holdSaleMock.mockImplementation(async () => {
       calls.push("holdSale");
@@ -249,7 +249,7 @@ describe("syncOutbox — sales replay phase", () => {
     createSaleMock.mockClear();
     decrementStockMock.mockClear();
     holdSaleMock.mockClear();
-    createSaleMock.mockResolvedValue({});
+    createSaleMock.mockResolvedValue({ sale: { total_amount: 10 }, items: [], changeAmount: 0 });
     decrementStockMock.mockResolvedValue({ id: "p1", quantity: 5 });
     holdSaleMock.mockResolvedValue({});
   });
@@ -364,5 +364,54 @@ describe("syncOutbox — sales replay phase", () => {
 
     expect(result.syncedCount).toBe(0);
     expect(outboxState.sales.find((s) => s.localId === "sale-1")?.status).toBe("partial");
+  });
+});
+
+describe("syncOutbox — offline receipt vs. server total mismatch detection (audit item #3)", () => {
+  beforeEach(() => {
+    outboxState.sales = [];
+    outboxState.held = [];
+    createSaleMock.mockClear();
+    decrementStockMock.mockClear();
+    decrementStockMock.mockResolvedValue({ id: "p1", quantity: 5 });
+  });
+
+  it("does not flag priceMismatch when the offline total matches the server-recorded total exactly", async () => {
+    outboxState.sales = [makeSale({ localId: "sale-1" })];
+    createSaleMock.mockResolvedValueOnce({ sale: { total_amount: 10 }, items: [], changeAmount: 0 });
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(1);
+    const synced = outboxState.sales.find((s) => s.localId === "sale-1");
+    expect(synced?.status).toBe("synced");
+    expect(synced?.priceMismatch).toBeUndefined();
+  });
+
+  it("flags priceMismatch when the offline total differs from the server-recorded total beyond tolerance, while still counting as synced", async () => {
+    outboxState.sales = [makeSale({ localId: "sale-1" })];
+    createSaleMock.mockResolvedValueOnce({ sale: { total_amount: 15 }, items: [], changeAmount: 0 });
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(1);
+    const synced = outboxState.sales.find((s) => s.localId === "sale-1");
+    expect(synced?.status).toBe("synced");
+    expect(synced?.priceMismatch).toEqual({ offlineTotal: 10, serverTotal: 15 });
+  });
+
+  it("does not flag priceMismatch when the difference is a negligible floating-point amount within the 0.01 tolerance", async () => {
+    outboxState.sales = [makeSale({ localId: "sale-1" })];
+    createSaleMock.mockResolvedValueOnce({ sale: { total_amount: 10.001 }, items: [], changeAmount: 0 });
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedCount).toBe(1);
+    const synced = outboxState.sales.find((s) => s.localId === "sale-1");
+    expect(synced?.status).toBe("synced");
+    expect(synced?.priceMismatch).toBeUndefined();
   });
 });
