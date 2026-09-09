@@ -635,6 +635,7 @@ export interface Database {
           note: string | null;
           store_id: string;
           created_at: string;
+          client_local_id: string | null;
         };
         Insert: {
           id?: string;
@@ -644,6 +645,7 @@ export interface Database {
           note?: string | null;
           store_id: string;
           created_at?: string;
+          client_local_id?: string | null;
         };
         Update: {
           id?: string;
@@ -653,6 +655,7 @@ export interface Database {
           note?: string | null;
           store_id?: string;
           created_at?: string;
+          client_local_id?: string | null;
         };
         Relationships: [
           {

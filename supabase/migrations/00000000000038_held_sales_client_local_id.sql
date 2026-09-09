@@ -1,0 +1,25 @@
+-- held_sales has no client-supplied idempotency key (unlike sales.id, see
+-- migrations 00000000000027/00000000000037's create_sale_atomic /
+-- record_return, and audit items #8-#10) — closes audit item #11
+-- (mashee_mart_general_audit.md).
+--
+-- The bug: services/heldSales.service.ts#holdSale never accepts an id, so
+-- held_sales.id (00000000000010_hold_sale.sql) is always server-generated.
+-- If lib/offline/syncManager.ts's held-sale replay INSERT succeeds
+-- server-side but the response is lost (network drop), the outbox entry
+-- never gets marked "synced" and (post item #8's fix) gets reset to
+-- "pending" and retried — inserting a second, duplicate held-sale row for
+-- the same original hold action, since nothing prevents it.
+--
+-- Fix: add a nullable, unique client_local_id column. Nullable + unique is
+-- safe because Postgres allows unlimited NULLs in a unique column — the
+-- ONLINE hold-sale path (hooks/usePOS.ts, isOnline branch) never supplies
+-- one and always inserts NULL, so it never conflicts with anything. Only
+-- the OFFLINE replay path (syncManager.ts) supplies a real value
+-- (sale.localId, a crypto.randomUUID() generated once per offline hold
+-- action in hooks/usePOS.ts's offline branch), letting a retried replay of
+-- the same original hold recognize its own prior success via a 23505 on
+-- this constraint instead of inserting a duplicate row — see
+-- lib/offline/syncManager.ts's held-sale replay loop.
+
+alter table held_sales add column if not exists client_local_id uuid unique;

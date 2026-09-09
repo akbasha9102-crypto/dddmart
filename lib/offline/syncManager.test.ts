@@ -128,6 +128,7 @@ describe("syncOutbox — held-sale replay phase", () => {
         items: sale.items,
         discountAmount: 5,
         note: "طاولة 3",
+        clientLocalId: sale.localId,
       },
       "store-9",
     );
@@ -144,6 +145,67 @@ describe("syncOutbox — held-sale replay phase", () => {
   });
 
   it("on error mid-loop, resets the failing held sale to pending and leaves remaining held sales pending", async () => {
+    const first = makeHeldSale({ localId: "held-1", createdAt: "2026-08-07T09:00:00.000Z" });
+    const second = makeHeldSale({ localId: "held-2", createdAt: "2026-08-07T10:00:00.000Z" });
+    outboxState.held = [first, second];
+    holdSaleMock.mockRejectedValueOnce(new Error("network dropped"));
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedHeldCount).toBe(0);
+    expect(outboxState.held.find((s) => s.localId === "held-1")?.status).toBe("pending");
+    expect(outboxState.held.find((s) => s.localId === "held-2")?.status).toBe("pending");
+    expect(holdSaleMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes clientLocalId: sale.localId to holdSale — audit item #11", async () => {
+    const sale = makeHeldSale({ localId: "held-local-9" });
+    outboxState.held = [sale];
+
+    const { syncOutbox } = await import("./syncManager");
+    await syncOutbox(FAKE_SUPABASE);
+
+    expect(holdSaleMock).toHaveBeenCalledWith(
+      FAKE_SUPABASE,
+      expect.objectContaining({ clientLocalId: "held-local-9" }),
+      sale.storeId,
+    );
+  });
+
+  it("treats a 23505 on held_sales_client_local_id_key as already-synced — audit item #11", async () => {
+    outboxState.held = [makeHeldSale({ localId: "held-1" })];
+    holdSaleMock.mockRejectedValueOnce({
+      code: "23505",
+      message: 'duplicate key value violates unique constraint "held_sales_client_local_id_key"',
+    });
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedHeldCount).toBe(1);
+    expect(outboxState.held.find((s) => s.localId === "held-1")?.status).toBe("synced");
+  });
+
+  it("continues processing the rest of the batch after a held_sales_client_local_id_key 23505 (does not stop the run) — audit item #11", async () => {
+    const first = makeHeldSale({ localId: "held-1", createdAt: "2026-08-07T09:00:00.000Z" });
+    const second = makeHeldSale({ localId: "held-2", createdAt: "2026-08-07T10:00:00.000Z" });
+    outboxState.held = [first, second];
+    holdSaleMock.mockRejectedValueOnce({
+      code: "23505",
+      message: 'duplicate key value violates unique constraint "held_sales_client_local_id_key"',
+    });
+
+    const { syncOutbox } = await import("./syncManager");
+    const result = await syncOutbox(FAKE_SUPABASE);
+
+    expect(result.syncedHeldCount).toBe(2);
+    expect(outboxState.held.find((s) => s.localId === "held-1")?.status).toBe("synced");
+    expect(outboxState.held.find((s) => s.localId === "held-2")?.status).toBe("synced");
+    expect(holdSaleMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("a non-23505 (or differently-named 23505) error still falls through to resetStaleHeldSyncing/pending unchanged (regression guard) — audit item #11", async () => {
     const first = makeHeldSale({ localId: "held-1", createdAt: "2026-08-07T09:00:00.000Z" });
     const second = makeHeldSale({ localId: "held-2", createdAt: "2026-08-07T10:00:00.000Z" });
     outboxState.held = [first, second];

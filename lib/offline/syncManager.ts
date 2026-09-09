@@ -52,6 +52,28 @@ function isSalesPkeyViolation(err: unknown): boolean {
   );
 }
 
+/**
+ * True only for a Postgres 23505 (unique_violation) that names the
+ * `held_sales_client_local_id_key` constraint specifically — see audit item
+ * #11. Unlike `sales` (which also has a unique (store_id, invoice_number)
+ * constraint that a genuine, different sale could collide on), held_sales
+ * has no other unique constraint besides its primary key (server-generated,
+ * never client-supplied, so it can't collide here) — so this narrowing is
+ * currently defensive-only, not resolving a real ambiguity, but is kept for
+ * consistency with isSalesPkeyViolation's pattern and in case a future
+ * unique constraint is ever added to this table.
+ */
+function isHeldSaleClientLocalIdViolation(err: unknown): boolean {
+  return (
+    isUniqueViolation(err) &&
+    typeof err === "object" &&
+    err !== null &&
+    "message" in err &&
+    typeof (err as { message?: unknown }).message === "string" &&
+    (err as { message: string }).message.includes("held_sales_client_local_id_key")
+  );
+}
+
 export interface SyncResult {
   syncedCount: number;
   conflictCount: number;
@@ -184,6 +206,7 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
             items: sale.items,
             discountAmount: sale.discountAmount,
             note: sale.note,
+            clientLocalId: sale.localId,
           },
           sale.storeId,
         );
@@ -191,7 +214,20 @@ export async function syncOutbox(supabase: Client): Promise<SyncResult> {
         heldOutbox = markHeldSaleSynced(heldOutbox, sale.localId);
         await setHeldSalesOutbox(heldOutbox);
         syncedHeldCount += 1;
-      } catch {
+      } catch (err) {
+        // A 23505 specifically on held_sales_client_local_id_key means this
+        // exact held sale (held_sales.client_local_id === sale.localId)
+        // already exists server-side — an earlier holdSale call for this
+        // same localId already succeeded and only the response was lost.
+        // Nothing to reconcile: mark "synced" and move on — see audit item
+        // #11 (mirrors isSalesPkeyViolation's pattern above for item #10).
+        if (isHeldSaleClientLocalIdViolation(err)) {
+          heldOutbox = markHeldSaleSynced(heldOutbox, sale.localId);
+          await setHeldSalesOutbox(heldOutbox);
+          syncedHeldCount += 1;
+          continue;
+        }
+
         // Same handling as the sales loop above: reset this held sale
         // (marked "syncing" above) back to "pending" and stop this phase,
         // leaving remaining held sales pending for the next sync attempt.

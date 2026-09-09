@@ -12,6 +12,8 @@ export interface HoldSaleParams {
   items: CartItem[];
   discountAmount: number;
   note: string | null;
+  /** Set when replaying a previously-queued offline held sale so a retried replay can recognize its own prior success via a unique-constraint hit instead of inserting a duplicate row. Omitted (and left to the DB default of NULL) for a normal online hold. */
+  clientLocalId?: string;
 }
 
 export interface ResumedHeldSale {
@@ -33,6 +35,7 @@ export async function holdSale(supabase: Client, params: HoldSaleParams, storeId
       discount_amount: params.discountAmount,
       note: params.note,
       store_id: storeId,
+      client_local_id: params.clientLocalId ?? null,
     })
     .select()
     .single();

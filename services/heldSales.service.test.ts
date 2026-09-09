@@ -26,6 +26,7 @@ const HELD_ROW: HeldSale = {
   note: "أحمد",
   store_id: "store-1",
   created_at: "2026-08-08T10:00:00Z",
+  client_local_id: null,
 };
 
 const RESTORED_PRODUCT: Product = {
@@ -119,8 +120,29 @@ describe("holdSale", () => {
       discount_amount: 1.5,
       note: "أحمد",
       store_id: "store-1",
+      client_local_id: null,
     });
     expect(result).toEqual(HELD_ROW);
+  });
+
+  it("passes client_local_id through when provided — audit item #11", async () => {
+    const { supabase, insertSpy } = createFakeSupabase({ insertedRow: HELD_ROW });
+
+    await holdSale(
+      supabase,
+      {
+        cashierId: "user-1",
+        items: CART_ITEMS,
+        discountAmount: 1.5,
+        note: "أحمد",
+        clientLocalId: "local-held-1",
+      },
+      "store-1",
+    );
+
+    expect(insertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ client_local_id: "local-held-1" }),
+    );
   });
 });
 
