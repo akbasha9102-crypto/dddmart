@@ -53,7 +53,7 @@ export function CustomerStatementPrinter({ customer, transactions, balance, onCl
           rows.map(({ transaction, runningBalance: rowBalance }) => (
             <div key={transaction.id} className="mb-1">
               <div className="flex justify-between">
-                <span>{transaction.type === "sale" ? "بيع بالآجل" : "دفعة"}</span>
+                <span>{transaction.type === "sale" ? "بيع بالآجل" : transaction.type === "return" ? "إرجاع" : "دفعة"}</span>
                 <span>{formatDateTime(transaction.created_at)}</span>
               </div>
               <div className="flex justify-between">

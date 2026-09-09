@@ -174,6 +174,31 @@ describe("recordReturn", () => {
   // the migration, not by a fabricated "two calls at once" unit test that
   // would not actually prove atomicity. See
   // supabase/migrations/00000000000021_atomic_return_recording.sql.
+
+  it("does not pass any customer/debt-related params to record_return — debt reduction is entirely server-side inside the RPC", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase({
+      recordReturnResult: { data: [INSERTED_RETURN], error: null },
+    });
+
+    await recordReturn(supabase, BASE_PARAMS, "user-1", "store-1");
+
+    const recordReturnCall = rpcSpy.mock.calls.find(([name]) => name === "record_return");
+    expect(recordReturnCall).toBeDefined();
+    const args = recordReturnCall?.[1] as Record<string, unknown>;
+    expect(Object.keys(args).sort()).toEqual(
+      [
+        "p_sale_id",
+        "p_sale_item_id",
+        "p_product_id",
+        "p_product_name",
+        "p_quantity",
+        "p_unit_label",
+        "p_unit_conversion_factor",
+        "p_refund_amount",
+        "p_reason",
+      ].sort(),
+    );
+  });
 });
 
 describe("getReturnedQuantitiesForSale", () => {

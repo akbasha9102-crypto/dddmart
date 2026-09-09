@@ -116,7 +116,7 @@ export function CustomerDetail({ detail, onBack, onChanged }: CustomerDetailProp
                 <div key={transaction.id} className="flex items-center justify-between gap-3 p-4">
                   <div className="flex flex-col gap-1">
                     <p className="text-sm font-medium text-gray-900">
-                      {transaction.type === "sale" ? "بيع بالآجل" : "دفعة"}
+                      {transaction.type === "sale" ? "بيع بالآجل" : transaction.type === "return" ? "إرجاع" : "دفعة"}
                     </p>
                     <p className="text-xs text-gray-400">{formatDateTime(transaction.created_at)}</p>
                   </div>

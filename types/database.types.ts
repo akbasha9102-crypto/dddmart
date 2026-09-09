@@ -32,7 +32,7 @@ export type OperationActionType =
   | "shift_opened"
   | "shift_closed";
 export type OperationEntityType = "product" | "category" | "sale" | "stock" | "customer" | "supplier" | "shift";
-export type CustomerTransactionType = "sale" | "payment";
+export type CustomerTransactionType = "sale" | "payment" | "return";
 export type SupplierTransactionType = "purchase" | "payment";
 
 export interface Database {
