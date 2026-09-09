@@ -22,26 +22,43 @@ export interface ResumedHeldSale {
 }
 
 /**
- * Holds the current cart: inserts a snapshot row. No stock action needed —
- * stock is already decremented at add-to-cart time (see hooks/usePOS.ts),
- * so the held items remain reserved exactly as they are.
+ * Holds a sale via the hold_sale RPC, which atomically re-resolves each
+ * line's unit_price/cost_price from the live products/product_units tables
+ * (same resolution logic as create_sale_atomic) and derives store_id from
+ * current_store_id() server-side — see
+ * supabase/migrations/00000000000041_hold_sale_atomic_pricing.sql.
+ * unitPrice/costPrice are deliberately NOT sent as RPC arguments at all —
+ * they're server-computed and any client-supplied value would be ignored,
+ * so sending them would be misleading. cashier_id remains client-supplied
+ * (params.cashierId, not auth.uid()) — held sales are an intentionally
+ * shared-till feature; this was audited separately and explicitly left
+ * unchanged (see the migration header for details).
  */
 export async function holdSale(supabase: Client, params: HoldSaleParams, storeId: string): Promise<HeldSale> {
-  const { data, error } = await supabase
-    .from("held_sales")
-    .insert({
-      cashier_id: params.cashierId,
-      items: params.items as unknown as Record<string, unknown>[],
-      discount_amount: params.discountAmount,
-      note: params.note,
-      store_id: storeId,
-      client_local_id: params.clientLocalId ?? null,
-    })
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("hold_sale", {
+    p_cashier_id: params.cashierId,
+    p_items: params.items.map((item) => ({
+      productId: item.productId,
+      name: item.name,
+      barcode: item.barcode,
+      quantity: item.quantity,
+      availableStock: item.availableStock,
+      unitName: item.unitName ?? null,
+      unitConversionFactor: item.unitConversionFactor ?? null,
+    })),
+    p_discount_amount: params.discountAmount,
+    p_note: params.note,
+    p_client_local_id: params.clientLocalId ?? null,
+  });
 
   if (error) throw error;
-  return data;
+
+  const inserted = data?.[0];
+  if (!inserted) {
+    throw new Error("تعذر تعليق الفاتورة — حاول مرة أخرى");
+  }
+
+  return inserted;
 }
 
 /** All held sales, oldest first. */

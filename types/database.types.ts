@@ -1064,6 +1064,24 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["stock_damages"]["Row"][];
       };
+      hold_sale: {
+        Args: {
+          p_cashier_id: string | null;
+          p_items: {
+            productId: string;
+            name: string;
+            barcode: string;
+            quantity: number;
+            availableStock: number;
+            unitName: string | null;
+            unitConversionFactor: number | null;
+          }[];
+          p_discount_amount: number;
+          p_note: string | null;
+          p_client_local_id?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["held_sales"]["Row"][];
+      };
       record_reconciliation: {
         Args: {
           p_product_id: string;

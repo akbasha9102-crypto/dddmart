@@ -47,28 +47,21 @@ const RESTORED_PRODUCT: Product = {
 
 /**
  * Hand-rolled fake covering the exact chains heldSales.service functions
- * call: held_sales.insert().select().single(), held_sales.select().order(),
- * held_sales.delete().eq().select().single(), held_sales.delete().eq(), and
- * rpc() (incrementStock). Deliberately minimal, matching the other fakes in
- * this repo (see returns.service.test.ts, damages.service.test.ts).
+ * call: held_sales.select().order(), held_sales.delete().eq().select().single(),
+ * held_sales.delete().eq(), and rpc() (hold_sale, incrementStock).
+ * Deliberately minimal, matching the other fakes in this repo (see
+ * returns.service.test.ts, damages.service.test.ts).
  */
 function createFakeSupabase(options: {
-  insertedRow?: HeldSale;
   listedRows?: HeldSale[] | null;
   deletedRow?: HeldSale;
-  rpcData?: Product[] | null;
+  rpcData?: unknown[] | null;
 }): {
   supabase: SupabaseClient<Database>;
-  insertSpy: ReturnType<typeof vi.fn>;
   orderSpy: ReturnType<typeof vi.fn>;
   deleteEqSpy: ReturnType<typeof vi.fn>;
   rpcSpy: ReturnType<typeof vi.fn>;
 } {
-  const insertSpy = vi.fn(() => ({
-    select: () => ({
-      single: async () => ({ data: options.insertedRow, error: null }),
-    }),
-  }));
   const orderSpy = vi.fn(async () => ({ data: options.listedRows, error: null }));
   const deleteEqSpy = vi.fn((..._args: unknown[]) => ({
     select: () => ({
@@ -82,7 +75,6 @@ function createFakeSupabase(options: {
     from: (table: string) => {
       if (table === "held_sales") {
         return {
-          insert: insertSpy,
           select: () => ({
             order: orderSpy,
           }),
@@ -96,12 +88,12 @@ function createFakeSupabase(options: {
     rpc: rpcSpy,
   } as unknown as SupabaseClient<Database>;
 
-  return { supabase, insertSpy, orderSpy, deleteEqSpy, rpcSpy };
+  return { supabase, orderSpy, deleteEqSpy, rpcSpy };
 }
 
 describe("holdSale", () => {
-  it("inserts with the correct fields and returns the inserted row", async () => {
-    const { supabase, insertSpy } = createFakeSupabase({ insertedRow: HELD_ROW });
+  it("calls the hold_sale RPC with the correct fields and returns the RPC's row unmodified", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase({ rpcData: [HELD_ROW] });
 
     const result = await holdSale(
       supabase,
@@ -114,19 +106,90 @@ describe("holdSale", () => {
       "store-1",
     );
 
-    expect(insertSpy).toHaveBeenCalledWith({
-      cashier_id: "user-1",
-      items: CART_ITEMS,
-      discount_amount: 1.5,
-      note: "أحمد",
-      store_id: "store-1",
-      client_local_id: null,
+    expect(rpcSpy).toHaveBeenCalledWith("hold_sale", {
+      p_cashier_id: "user-1",
+      p_items: [
+        {
+          productId: "product-1",
+          name: "علبة علك",
+          barcode: "1111",
+          quantity: 3,
+          availableStock: 47,
+          unitName: null,
+          unitConversionFactor: null,
+        },
+      ],
+      p_discount_amount: 1.5,
+      p_note: "أحمد",
+      p_client_local_id: null,
     });
     expect(result).toEqual(HELD_ROW);
   });
 
-  it("passes client_local_id through when provided — audit item #11", async () => {
-    const { supabase, insertSpy } = createFakeSupabase({ insertedRow: HELD_ROW });
+  it("does not send unitPrice/costPrice to the RPC — price is server-resolved, not client-supplied", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase({ rpcData: [HELD_ROW] });
+
+    await holdSale(
+      supabase,
+      {
+        cashierId: "user-1",
+        items: CART_ITEMS,
+        discountAmount: 1.5,
+        note: "أحمد",
+      },
+      "store-1",
+    );
+
+    const [, rpcArgs] = rpcSpy.mock.calls[0] as [string, { p_items: Record<string, unknown>[] }];
+    for (const line of rpcArgs.p_items) {
+      expect(line).not.toHaveProperty("unitPrice");
+      expect(line).not.toHaveProperty("costPrice");
+    }
+  });
+
+  it("passes unitName/unitConversionFactor through per-line when present on the cart item", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase({ rpcData: [HELD_ROW] });
+
+    const items: CartItem[] = [
+      {
+        productId: "product-1",
+        name: "علبة علك",
+        barcode: "1111",
+        unitPrice: 2,
+        costPrice: 1,
+        quantity: 2,
+        availableStock: 47,
+        unitName: "كارتون",
+        unitConversionFactor: 24,
+      },
+    ];
+
+    await holdSale(
+      supabase,
+      {
+        cashierId: "user-1",
+        items,
+        discountAmount: 0,
+        note: null,
+      },
+      "store-1",
+    );
+
+    expect(rpcSpy).toHaveBeenCalledWith(
+      "hold_sale",
+      expect.objectContaining({
+        p_items: [
+          expect.objectContaining({
+            unitName: "كارتون",
+            unitConversionFactor: 24,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("passes client_local_id through as p_client_local_id when provided — audit item #11", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase({ rpcData: [HELD_ROW] });
 
     await holdSale(
       supabase,
@@ -140,9 +203,47 @@ describe("holdSale", () => {
       "store-1",
     );
 
-    expect(insertSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ client_local_id: "local-held-1" }),
+    expect(rpcSpy).toHaveBeenCalledWith(
+      "hold_sale",
+      expect.objectContaining({ p_client_local_id: "local-held-1" }),
     );
+  });
+
+  it("sends p_client_local_id: null when clientLocalId is omitted", async () => {
+    const { supabase, rpcSpy } = createFakeSupabase({ rpcData: [HELD_ROW] });
+
+    await holdSale(
+      supabase,
+      {
+        cashierId: "user-1",
+        items: CART_ITEMS,
+        discountAmount: 1.5,
+        note: "أحمد",
+      },
+      "store-1",
+    );
+
+    expect(rpcSpy).toHaveBeenCalledWith(
+      "hold_sale",
+      expect.objectContaining({ p_client_local_id: null }),
+    );
+  });
+
+  it("throws a friendly Arabic error when the RPC returns no rows", async () => {
+    const { supabase } = createFakeSupabase({ rpcData: [] });
+
+    await expect(
+      holdSale(
+        supabase,
+        {
+          cashierId: "user-1",
+          items: CART_ITEMS,
+          discountAmount: 1.5,
+          note: "أحمد",
+        },
+        "store-1",
+      ),
+    ).rejects.toThrow("تعذر تعليق الفاتورة");
   });
 });
 
