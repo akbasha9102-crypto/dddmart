@@ -13,6 +13,7 @@ const PRODUCT: Product = {
   quantity: 50,
   min_stock_threshold: 5,
   unit: "قطعة",
+  sold_by_weight: false,
   is_active: true,
   store_id: "store-1",
   created_at: "",
@@ -59,6 +60,7 @@ describe("productUnitToCartItem", () => {
       availableStock: 50,
       unitName: "كارتون",
       unitConversionFactor: 24,
+      soldByWeight: false,
     });
   });
 
@@ -71,11 +73,24 @@ describe("productUnitToCartItem", () => {
 describe("calculateTotals", () => {
   it("clamps totalAmount to 0 for an oversized discount WITHOUT throwing — pure clamp-only helper, live cart update loop must never throw on keystroke", () => {
     const items: CartItem[] = [
-      { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 100, costPrice: 60, quantity: 2, availableStock: 8 },
+      { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 100, costPrice: 60, quantity: 2, availableStock: 8, soldByWeight: false },
     ];
 
     const totals = calculateTotals(items, 9999);
 
     expect(totals).toEqual({ subtotal: 200, discountAmount: 9999, totalAmount: 0 });
+  });
+});
+
+describe("soldByWeight propagation", () => {
+  it("copies sold_by_weight from the product into the cart item", () => {
+    const weighedProduct: Product = { ...PRODUCT, sold_by_weight: true };
+    expect(productToCartItem(weighedProduct, 1.25).soldByWeight).toBe(true);
+    expect(productToCartItem(PRODUCT, 1).soldByWeight).toBe(false);
+  });
+
+  it("copies sold_by_weight through productUnitToCartItem too", () => {
+    const weighedProduct: Product = { ...PRODUCT, sold_by_weight: true };
+    expect(productUnitToCartItem(weighedProduct, CARTON_UNIT, 1).soldByWeight).toBe(true);
   });
 });

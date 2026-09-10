@@ -21,6 +21,8 @@ export interface CartItem {
   unitName?: string;
   /** How many base units this line's unit equals. Undefined/1 both mean the base unit. */
   unitConversionFactor?: number;
+  /** Copied from products.sold_by_weight at add-to-cart time — determines whether the cart/checkout UI offers a fractional weight input or the integer +/- stepper for this line. */
+  soldByWeight: boolean;
 }
 
 export interface CartTotals {
@@ -65,6 +67,7 @@ export function productToCartItem(product: Product, quantity = 1): CartItem {
     costPrice: product.cost_price,
     quantity,
     availableStock: product.quantity,
+    soldByWeight: product.sold_by_weight,
   };
 }
 
@@ -79,6 +82,7 @@ export function productUnitToCartItem(product: Product, unit: ProductUnit, quant
     availableStock: product.quantity,
     unitName: unit.unit_name,
     unitConversionFactor: unit.conversion_factor,
+    soldByWeight: product.sold_by_weight,
   };
 }
 
