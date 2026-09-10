@@ -10,7 +10,7 @@ import type { Product, Category, ProductUnit } from "@/types/product";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { BarcodeGenerator } from "./BarcodeGenerator";
+import { BarcodeGenerator, generateBarcode } from "./BarcodeGenerator";
 import { ProfitPreview } from "./ProfitPreview";
 import { ProductUnitsManager } from "./ProductUnitsManager";
 import { ReceiveStockForm } from "./ReceiveStockForm";
@@ -32,6 +32,7 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
   const [quantity, setQuantity] = useState(String(product?.quantity ?? 0));
   const [minStock, setMinStock] = useState(String(product?.min_stock_threshold ?? 5));
   const [unit, setUnit] = useState(product?.unit ?? "قطعة");
+  const [soldByWeight, setSoldByWeight] = useState(product?.sold_by_weight ?? false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,13 +87,14 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
       const supabase = createClient();
       const payload = {
         name,
-        barcode,
+        barcode: barcode.trim() || generateBarcode(),
         category_id: categoryId || null,
         cost_price: Number(costPrice) || 0,
         sale_price: Number(salePrice) || 0,
         quantity: Number(quantity) || 0,
         min_stock_threshold: Number(minStock) || 0,
         unit,
+        sold_by_weight: soldByWeight,
       };
 
       const actorId = user?.id ?? null;
@@ -113,7 +115,7 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input label="اسم المنتج" value={name} onChange={(event) => setName(event.target.value)} required />
 
-        <BarcodeGenerator value={barcode} onChange={setBarcode} />
+        <BarcodeGenerator value={barcode} onChange={setBarcode} required={false} />
 
         <div className="flex flex-col gap-1">
           <label htmlFor="category" className="text-sm font-medium text-gray-700">
@@ -159,6 +161,7 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
             label="الكمية"
             type="number"
             min={0}
+            step={soldByWeight ? "0.001" : "1"}
             value={quantity}
             onChange={(event) => setQuantity(event.target.value)}
           />
@@ -166,6 +169,7 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
             label="حد التنبيه"
             type="number"
             min={0}
+            step={soldByWeight ? "0.001" : "1"}
             value={minStock}
             onChange={(event) => setMinStock(event.target.value)}
           />
@@ -175,6 +179,16 @@ export function ProductForm({ product, categories, onSaved, onCancel }: ProductF
         </div>
 
         <Input label="الوحدة" value={unit} onChange={(event) => setUnit(event.target.value)} />
+
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <input
+            type="checkbox"
+            checked={soldByWeight}
+            onChange={(event) => setSoldByWeight(event.target.checked)}
+            className="h-5 w-5 rounded border-gray-300 text-brand-600 focus:ring-brand-200"
+          />
+          يباع بالوزن (يقبل كميات كسرية، مثل 1.250 كغم)
+        </label>
 
         {product && isAdminRole(role) ? <ProductUnitsManager productId={product.id} /> : null}
 
