@@ -1,3 +1,4 @@
+import { roundMoney } from "@/lib/utils";
 import type { Database, PaymentMethod } from "./database.types";
 import type { Product, ProductUnit } from "./product";
 
@@ -87,7 +88,7 @@ export function productUnitToCartItem(product: Product, unit: ProductUnit, quant
 }
 
 export function calculateTotals(items: CartItem[], discountAmount = 0): CartTotals {
-  const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const subtotal = items.reduce((sum, item) => sum + roundMoney(item.unitPrice * item.quantity), 0);
   const totalAmount = Math.max(subtotal - discountAmount, 0);
   return { subtotal, discountAmount, totalAmount };
 }

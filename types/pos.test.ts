@@ -82,6 +82,58 @@ describe("calculateTotals", () => {
   });
 });
 
+describe("calculateTotals — per-line rounding for fractional quantities", () => {
+  it("rounds each line to the nearest fils before summing, matching create_sale_atomic's algorithm", () => {
+    // Two weighed lines whose raw (unrounded) products would sum to a
+    // different total than summing the two ALREADY-rounded line totals —
+    // create_sale_atomic (migration 42) rounds v_unit_price * v_quantity
+    // PER LINE before adding into v_subtotal, so the client must too.
+    const items: CartItem[] = [
+      {
+        productId: "p1",
+        name: "دجاج",
+        barcode: "1111",
+        unitPrice: 3450.75,
+        costPrice: 3000,
+        quantity: 1.257,
+        availableStock: 50,
+        soldByWeight: true,
+      },
+      {
+        productId: "p2",
+        name: "سكر",
+        barcode: "2222",
+        unitPrice: 1250.33,
+        costPrice: 1000,
+        quantity: 0.834,
+        availableStock: 50,
+        soldByWeight: true,
+      },
+    ];
+
+    // Per-line rounded: round(3450.75 * 1.257, 2) = 4337.59, round(1250.33 * 0.834, 2) = 1042.78
+    // Sum of rounded lines: 4337.59 + 1042.78 = 5380.37
+    const { subtotal } = calculateTotals(items, 0);
+    expect(subtotal).toBe(5380.37);
+  });
+
+  it("still sums whole-number-quantity lines exactly as before (regression guard)", () => {
+    const items: CartItem[] = [
+      {
+        productId: "p1",
+        name: "علبة علك",
+        barcode: "1111",
+        unitPrice: 2,
+        costPrice: 1,
+        quantity: 3,
+        availableStock: 50,
+        soldByWeight: false,
+      },
+    ];
+    expect(calculateTotals(items, 0).subtotal).toBe(6);
+  });
+});
+
 describe("soldByWeight propagation", () => {
   it("copies sold_by_weight from the product into the cart item", () => {
     const weighedProduct: Product = { ...PRODUCT, sold_by_weight: true };
