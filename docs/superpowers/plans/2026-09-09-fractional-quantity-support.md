@@ -28,6 +28,8 @@
 - Modify: `types/database.types.ts:139-194` (products table `Row`/`Insert`/`Update`)
 - Modify: `types/pos.ts` (`CartItem` interface, `productToCartItem`, `productUnitToCartItem`)
 - Modify: `types/pos.test.ts` (existing `PRODUCT` fixture needs the new required field, plus a new test)
+- Modify: `services/sales.service.test.ts` (`BASE_ITEMS: CartItem[]` fixture at line 9 needs `soldByWeight`)
+- Modify: `services/heldSales.service.test.ts` (`CART_ITEMS`/other `CartItem[]` fixtures at lines 9, 153, 337 need `soldByWeight`)
 
 **Interfaces:**
 - Produces: `Product.sold_by_weight: boolean` (via `Database["public"]["Tables"]["products"]["Row"]`), `CartItem.soldByWeight: boolean`. Every later task that reads a product's weight-ness uses these exact names.
@@ -186,15 +188,23 @@ describe("soldByWeight propagation", () => {
 });
 ```
 
-- [ ] **Step 4: Run tests and typecheck**
+- [ ] **Step 4: Fix the other `CartItem` fixtures repo-wide**
 
-Run: `npm run typecheck && npm test -- types/pos.test.ts`
-Expected: typecheck passes with 0 errors; all tests in `types/pos.test.ts` pass, including the two new ones.
+`tsconfig.json`'s `include` is repo-wide (`**/*.ts`/`**/*.tsx`, no test exclusion) and `npm run typecheck` runs `tsc --noEmit` over the whole repo — so once `CartItem.soldByWeight` becomes required, three more pre-existing fixtures break typecheck, not just `PRODUCT` above:
 
-- [ ] **Step 5: Commit**
+- `types/pos.test.ts:74` — a separate inline `CartItem` literal in the `calculateTotals` describe block. Add `soldByWeight: false`.
+- `services/sales.service.test.ts:9` — `BASE_ITEMS: CartItem[]`. Add `soldByWeight: false` to each item.
+- `services/heldSales.service.test.ts:9, 153, 337` — three separate `CartItem[]` literals (`CART_ITEMS` and others). Add `soldByWeight: false` to each item in all three.
+
+- [ ] **Step 5: Run tests and typecheck**
+
+Run: `npm run typecheck && npm test -- types/pos.test.ts services/sales.service.test.ts services/heldSales.service.test.ts`
+Expected: typecheck passes with 0 errors; all tests in all three files pass, including the two new ones in `types/pos.test.ts`.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add types/database.types.ts types/pos.ts types/pos.test.ts
+git add types/database.types.ts types/pos.ts types/pos.test.ts services/sales.service.test.ts services/heldSales.service.test.ts
 git commit -m "$(cat <<'EOF'
 إضافة sold_by_weight لأنواع المنتج وعنصر السلة
 
