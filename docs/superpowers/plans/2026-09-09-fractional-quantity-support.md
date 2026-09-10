@@ -240,9 +240,9 @@ describe("roundMoney", () => {
   });
 
   it("handles a fractional-quantity line total (the actual bug this fixes)", () => {
-    // 1.257 كغم * 3450.75 د.ع/كغم = 4337.79... — must match what
+    // 1.257 كغم * 3450.75 د.ع/كغم = 4337.59... — must match what
     // create_sale_atomic's round(v_unit_price * v_quantity, 2) computes.
-    expect(roundMoney(1.257 * 3450.75)).toBe(4337.79);
+    expect(roundMoney(1.257 * 3450.75)).toBe(4337.59);
   });
 });
 
@@ -449,10 +449,10 @@ describe("calculateTotals — per-line rounding for fractional quantities", () =
       },
     ];
 
-    // Per-line rounded: round(3450.75 * 1.257, 2) = 4337.79, round(1250.33 * 0.834, 2) = 1042.78
-    // Sum of rounded lines: 4337.79 + 1042.78 = 5380.57
+    // Per-line rounded: round(3450.75 * 1.257, 2) = 4337.59, round(1250.33 * 0.834, 2) = 1042.78
+    // Sum of rounded lines: 4337.59 + 1042.78 = 5380.37
     const { subtotal } = calculateTotals(items, 0);
-    expect(subtotal).toBe(5380.57);
+    expect(subtotal).toBe(5380.37);
   });
 
   it("still sums whole-number-quantity lines exactly as before (regression guard)", () => {
@@ -476,7 +476,7 @@ describe("calculateTotals — per-line rounding for fractional quantities", () =
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npm test -- types/pos.test.ts`
-Expected: FAIL — the new fractional-quantity test's expected subtotal (`5380.57`) does not match the un-rounded-per-line sum the current implementation produces.
+Expected: FAIL — the new fractional-quantity test's expected subtotal (`5380.37`) does not match the un-rounded-per-line sum the current implementation produces.
 
 - [ ] **Step 3: Implement the fix**
 
