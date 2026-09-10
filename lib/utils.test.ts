@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDateTime, formatTime, roundMoney, roundQuantity } from "@/lib/utils";
+import { formatQuantity, formatDateTime, formatTime, roundMoney, roundQuantity } from "@/lib/utils";
 
 describe("formatTime", () => {
   it("does not zero-pad a single-digit hour", () => {
@@ -56,5 +56,25 @@ describe("roundQuantity", () => {
 
   it("leaves a whole number unchanged", () => {
     expect(roundQuantity(5)).toBe(5);
+  });
+});
+
+describe("formatQuantity", () => {
+  it("shows a count-based quantity as a plain integer, ignoring the unit", () => {
+    expect(formatQuantity(12, false, "قطعة")).toBe("12");
+  });
+
+  it("shows a weighed quantity with the unit label appended", () => {
+    expect(formatQuantity(4.5, true, "كغم")).toBe("4.5 كغم");
+  });
+
+  it("trims trailing zeros for a weighed quantity", () => {
+    expect(formatQuantity(2, true, "كغم")).toBe("2 كغم");
+    expect(formatQuantity(1.25, true, "كغم")).toBe("1.25 كغم");
+    expect(formatQuantity(1.250, true, "كغم")).toBe("1.25 كغم");
+  });
+
+  it("keeps up to 3 decimal places for a weighed quantity when needed", () => {
+    expect(formatQuantity(1.234, true, "كغم")).toBe("1.234 كغم");
   });
 });

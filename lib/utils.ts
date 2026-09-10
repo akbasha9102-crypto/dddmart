@@ -37,6 +37,23 @@ export function roundQuantity(value: number): number {
   return Math.round((value + Number.EPSILON) * 1000) / 1000;
 }
 
+/**
+ * Displays a product quantity for the UI. Count-based products (the vast
+ * majority, and every product before this feature shipped) show as a
+ * plain integer, unit omitted — unchanged from today's behavior. Weighed
+ * products show up to 3 decimal places with trailing zeros trimmed (e.g.
+ * 1.250 -> "1.25") and the product's own unit label appended (e.g. "كغم"),
+ * so the display never claims false gram-level precision the store owner
+ * didn't actually enter.
+ */
+export function formatQuantity(quantity: number, soldByWeight: boolean, unit: string): string {
+  if (!soldByWeight) {
+    return String(quantity);
+  }
+  const trimmed = Number(quantity.toFixed(3)).toString();
+  return `${trimmed} ${unit}`;
+}
+
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat("ar-IQ", {
     year: "numeric",
