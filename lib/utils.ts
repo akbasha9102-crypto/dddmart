@@ -14,6 +14,29 @@ export function formatCurrency(amount: number): string {
   return `${currencyFormatter.format(amount)} د.ع`;
 }
 
+/**
+ * Rounds a money value to 2 decimal places, matching Postgres
+ * `round(numeric, 2)`'s round-half-away-from-zero behavior for the
+ * always-non-negative amounts this app computes. The `Number.EPSILON`
+ * nudge avoids the classic JS binary-float glitch where
+ * `Math.round(1.005 * 100)` evaluates to 100 instead of 101 because 1.005
+ * isn't exactly representable in IEEE754 double precision.
+ */
+export function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Rounds a quantity to 3 decimal places, matching the DB's
+ * numeric(10,3) precision for weighed-product quantities — applied
+ * immediately when a weight is typed in, so no small float-drift
+ * artifact (e.g. 1.2000000000000002) ever reaches cart state or a
+ * checkout payload.
+ */
+export function roundQuantity(value: number): number {
+  return Math.round((value + Number.EPSILON) * 1000) / 1000;
+}
+
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat("ar-IQ", {
     year: "numeric",
