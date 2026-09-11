@@ -147,6 +147,7 @@ export interface Database {
           quantity: number;
           min_stock_threshold: number;
           unit: string;
+          sold_by_weight: boolean;
           is_active: boolean;
           store_id: string;
           created_at: string;
@@ -162,6 +163,7 @@ export interface Database {
           quantity?: number;
           min_stock_threshold?: number;
           unit?: string;
+          sold_by_weight?: boolean;
           is_active?: boolean;
           store_id: string;
           created_at?: string;
@@ -177,6 +179,7 @@ export interface Database {
           quantity?: number;
           min_stock_threshold?: number;
           unit?: string;
+          sold_by_weight?: boolean;
           is_active?: boolean;
           store_id?: string;
           created_at?: string;

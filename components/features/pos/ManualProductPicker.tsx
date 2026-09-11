@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatQuantity, roundQuantity } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ALL_CATEGORY_ID, ALL_CATEGORY_LABEL, groupProductsByCategory, resolveVisibleProducts } from "@/lib/categoryGroups";
@@ -36,6 +36,7 @@ export function ManualProductPicker({ products, categories, open, onAdd, onClose
 
   const [selectedProduct, setSelectedProduct] = useState<ProductWithCategory | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [weightError, setWeightError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -43,6 +44,7 @@ export function ManualProductPicker({ products, categories, open, onAdd, onClose
     setSearch("");
     setSelectedProduct(null);
     setQuantity(1);
+    setWeightError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -50,13 +52,19 @@ export function ManualProductPicker({ products, categories, open, onAdd, onClose
     if (product.quantity <= 0) return;
     setSelectedProduct(product);
     setQuantity(1);
+    setWeightError(null);
   }
 
   function confirmAdd() {
     if (!selectedProduct) return;
+    if (selectedProduct.sold_by_weight && (quantity <= 0 || quantity > selectedProduct.quantity)) {
+      setWeightError(`الوزن يجب أن يكون بين 0.001 و${formatQuantity(selectedProduct.quantity, true, selectedProduct.unit)}`);
+      return;
+    }
     onAdd(selectedProduct, quantity);
     setSelectedProduct(null);
     setQuantity(1);
+    setWeightError(null);
   }
 
   if (products.length === 0) {
@@ -149,7 +157,8 @@ export function ManualProductPicker({ products, categories, open, onAdd, onClose
                 <span className="shrink-0 text-sm font-semibold text-red-600">غير متوفر</span>
               ) : (
                 <span className="shrink-0 text-sm text-gray-500">
-                  {formatCurrency(product.sale_price)} · متوفر {product.quantity}
+                  {formatCurrency(product.sale_price)} · متوفر{" "}
+                  {formatQuantity(product.quantity, product.sold_by_weight, product.unit)}
                 </span>
               )}
             </button>
@@ -158,30 +167,49 @@ export function ManualProductPicker({ products, categories, open, onAdd, onClose
       </div>
 
       {selectedProduct ? (
-        <div className="flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 p-3">
-          <span className="flex-1 truncate font-medium text-gray-900">{selectedProduct.name}</span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="h-8 w-8 rounded-md bg-white text-lg font-bold hover:bg-gray-100"
-              aria-label="إنقاص الكمية"
-            >
-              −
-            </button>
-            <span className="w-8 text-center font-semibold">{quantity}</span>
-            <button
-              type="button"
-              onClick={() => setQuantity((q) => Math.min(selectedProduct.quantity, q + 1))}
-              className="h-8 w-8 rounded-md bg-white text-lg font-bold hover:bg-gray-100"
-              aria-label="زيادة الكمية"
-            >
-              +
-            </button>
+        <div className="flex flex-col gap-2 rounded-xl border border-brand-200 bg-brand-50 p-3">
+          <div className="flex items-center gap-3">
+            <span className="flex-1 truncate font-medium text-gray-900">{selectedProduct.name}</span>
+            <div className="flex items-center gap-2">
+              {selectedProduct.sold_by_weight ? (
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.001"
+                  min="0.001"
+                  value={quantity}
+                  onChange={(event) => setQuantity(Number(event.target.value) || 0)}
+                  onBlur={(event) => setQuantity(roundQuantity(Number(event.target.value) || 0))}
+                  className="h-10 w-24 text-center"
+                  aria-label="الوزن (كغم)"
+                />
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    className="h-8 w-8 rounded-md bg-white text-lg font-bold hover:bg-gray-100"
+                    aria-label="إنقاص الكمية"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center font-semibold">{quantity}</span>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.min(selectedProduct.quantity, q + 1))}
+                    className="h-8 w-8 rounded-md bg-white text-lg font-bold hover:bg-gray-100"
+                    aria-label="زيادة الكمية"
+                  >
+                    +
+                  </button>
+                </>
+              )}
+            </div>
+            <Button size="sm" onClick={confirmAdd} disabled={selectedProduct.sold_by_weight && quantity <= 0}>
+              ➕ إضافة
+            </Button>
           </div>
-          <Button size="sm" onClick={confirmAdd}>
-            ➕ إضافة
-          </Button>
+          {weightError ? <p className="text-sm text-red-600">{weightError}</p> : null}
         </div>
       ) : null}
 

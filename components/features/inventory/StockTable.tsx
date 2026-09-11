@@ -5,7 +5,7 @@ import Link from "next/link";
 import { PackagePlus, PackageX, ClipboardCheck } from "lucide-react";
 import type { Product } from "@/types/product";
 import { isLowStock } from "@/types/product";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatQuantity } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { isAdminRole } from "@/lib/employees/adminCheck";
@@ -51,7 +51,7 @@ export function StockTable({ products, onDelete, onReceiveStock, onDamageStock, 
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="text-gray-600">{formatCurrency(product.sale_price)}</span>
                 <span className={cn("font-semibold", isLowStock(product) && "text-red-600")}>
-                  {product.quantity}
+                  {formatQuantity(product.quantity, product.sold_by_weight, product.unit)}
                   {isLowStock(product) ? " ⚠" : ""}
                 </span>
               </div>

@@ -13,6 +13,7 @@ const PRODUCT: Product = {
   quantity: 50,
   min_stock_threshold: 5,
   unit: "قطعة",
+  sold_by_weight: false,
   is_active: true,
   store_id: "store-1",
   created_at: "",
@@ -59,6 +60,7 @@ describe("productUnitToCartItem", () => {
       availableStock: 50,
       unitName: "كارتون",
       unitConversionFactor: 24,
+      soldByWeight: false,
     });
   });
 
@@ -71,11 +73,76 @@ describe("productUnitToCartItem", () => {
 describe("calculateTotals", () => {
   it("clamps totalAmount to 0 for an oversized discount WITHOUT throwing — pure clamp-only helper, live cart update loop must never throw on keystroke", () => {
     const items: CartItem[] = [
-      { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 100, costPrice: 60, quantity: 2, availableStock: 8 },
+      { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 100, costPrice: 60, quantity: 2, availableStock: 8, soldByWeight: false },
     ];
 
     const totals = calculateTotals(items, 9999);
 
     expect(totals).toEqual({ subtotal: 200, discountAmount: 9999, totalAmount: 0 });
+  });
+});
+
+describe("calculateTotals — per-line rounding for fractional quantities", () => {
+  it("rounds each line to the nearest fils before summing, matching create_sale_atomic's algorithm", () => {
+    // Two weighed lines whose raw (unrounded) products would sum to a
+    // different total than summing the two ALREADY-rounded line totals —
+    // create_sale_atomic (migration 42) rounds v_unit_price * v_quantity
+    // PER LINE before adding into v_subtotal, so the client must too.
+    const items: CartItem[] = [
+      {
+        productId: "p1",
+        name: "دجاج",
+        barcode: "1111",
+        unitPrice: 3450.75,
+        costPrice: 3000,
+        quantity: 1.257,
+        availableStock: 50,
+        soldByWeight: true,
+      },
+      {
+        productId: "p2",
+        name: "سكر",
+        barcode: "2222",
+        unitPrice: 1250.33,
+        costPrice: 1000,
+        quantity: 0.834,
+        availableStock: 50,
+        soldByWeight: true,
+      },
+    ];
+
+    // Per-line rounded: round(3450.75 * 1.257, 2) = 4337.59, round(1250.33 * 0.834, 2) = 1042.78
+    // Sum of rounded lines: 4337.59 + 1042.78 = 5380.37
+    const { subtotal } = calculateTotals(items, 0);
+    expect(subtotal).toBe(5380.37);
+  });
+
+  it("still sums whole-number-quantity lines exactly as before (regression guard)", () => {
+    const items: CartItem[] = [
+      {
+        productId: "p1",
+        name: "علبة علك",
+        barcode: "1111",
+        unitPrice: 2,
+        costPrice: 1,
+        quantity: 3,
+        availableStock: 50,
+        soldByWeight: false,
+      },
+    ];
+    expect(calculateTotals(items, 0).subtotal).toBe(6);
+  });
+});
+
+describe("soldByWeight propagation", () => {
+  it("copies sold_by_weight from the product into the cart item", () => {
+    const weighedProduct: Product = { ...PRODUCT, sold_by_weight: true };
+    expect(productToCartItem(weighedProduct, 1.25).soldByWeight).toBe(true);
+    expect(productToCartItem(PRODUCT, 1).soldByWeight).toBe(false);
+  });
+
+  it("copies sold_by_weight through productUnitToCartItem too", () => {
+    const weighedProduct: Product = { ...PRODUCT, sold_by_weight: true };
+    expect(productUnitToCartItem(weighedProduct, CARTON_UNIT, 1).soldByWeight).toBe(true);
   });
 });

@@ -6,7 +6,7 @@ import type { Database } from "@/types/database.types";
 import type { Sale, SaleItem } from "@/types/pos";
 
 const BASE_ITEMS: CartItem[] = [
-  { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 100, costPrice: 60, quantity: 2, availableStock: 8 },
+  { productId: "p1", name: "منتج", barcode: "1111", unitPrice: 100, costPrice: 60, quantity: 2, availableStock: 8, soldByWeight: false },
 ];
 
 const BASE_PAYLOAD: CheckoutPayload = {

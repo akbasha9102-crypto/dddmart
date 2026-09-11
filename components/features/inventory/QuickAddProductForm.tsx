@@ -35,6 +35,7 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
   const [costPrice, setCostPrice] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [soldByWeight, setSoldByWeight] = useState(false);
   const [categoryId, setCategoryId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +71,7 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
           cost_price: Number(costPrice) || 0,
           sale_price: Number(salePrice) || 0,
           barcode: barcode.trim() || generateBarcode(),
+          sold_by_weight: soldByWeight,
         },
         user?.id ?? null,
         storeId,
@@ -153,13 +155,24 @@ export function QuickAddProductForm({ categories }: QuickAddProductFormProps) {
       <Input
         label="العدد / الكمية"
         type="number"
-        inputMode="numeric"
+        inputMode="decimal"
         min={0}
+        step={soldByWeight ? "0.001" : "1"}
         value={quantity}
         onChange={(event) => setQuantity(event.target.value)}
         className="h-14 text-lg"
         required
       />
+
+      <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+        <input
+          type="checkbox"
+          checked={soldByWeight}
+          onChange={(event) => setSoldByWeight(event.target.checked)}
+          className="h-5 w-5 rounded border-gray-300 text-brand-600 focus:ring-brand-200"
+        />
+        يباع بالوزن (يقبل كميات كسرية، مثل 1.250 كغم)
+      </label>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="quick-category" className="text-sm font-medium text-gray-700">

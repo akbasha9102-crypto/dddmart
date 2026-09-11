@@ -5,7 +5,7 @@ import Link from "next/link";
 import { PackagePlus, PackageX, ClipboardCheck, Pencil, Trash2, LayoutGrid } from "lucide-react";
 import type { Category, ProductWithCategory } from "@/types/product";
 import { isLowStock } from "@/types/product";
-import { cn } from "@/lib/utils";
+import { cn, formatQuantity } from "@/lib/utils";
 import { ALL_CATEGORY_ID, ALL_CATEGORY_LABEL, groupProductsByCategory, resolveVisibleProducts } from "@/lib/categoryGroups";
 import { getCategoryIcon } from "@/lib/categoryIcons";
 import { useAuth } from "@/context/AuthContext";
@@ -149,7 +149,7 @@ function ProductRow({
     <div className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2">
       <span className="flex-1 truncate font-medium text-gray-900">{product.name}</span>
       <span className={cn("font-semibold", isLowStock(product) && "text-red-600")}>
-        {product.quantity}
+        {formatQuantity(product.quantity, product.sold_by_weight, product.unit)}
         {isLowStock(product) ? " ⚠" : ""}
       </span>
       <div className="flex items-center gap-1">

@@ -1,7 +1,8 @@
 "use client";
 
 import { usePOSContext } from "@/context/POSContext";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, roundQuantity } from "@/lib/utils";
+import { Input } from "@/components/ui/Input";
 
 export function CartGrid() {
   const { items, updateQuantity, removeItem } = usePOSContext();
@@ -31,23 +32,39 @@ export function CartGrid() {
           </div>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => updateQuantity(item.barcode, item.quantity - 1)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white text-lg font-bold text-gray-700 shadow-sm hover:bg-gray-100"
-                aria-label="إنقاص الكمية"
-              >
-                −
-              </button>
-              <span className="w-10 text-center text-base font-semibold">{item.quantity}</span>
-              <button
-                type="button"
-                onClick={() => updateQuantity(item.barcode, item.quantity + 1)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white text-lg font-bold text-gray-700 shadow-sm hover:bg-gray-100"
-                aria-label="زيادة الكمية"
-              >
-                +
-              </button>
+              {item.soldByWeight ? (
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.001"
+                  min="0.001"
+                  value={item.quantity}
+                  onChange={(event) => updateQuantity(item.barcode, Number(event.target.value) || 0)}
+                  onBlur={(event) => updateQuantity(item.barcode, roundQuantity(Number(event.target.value) || 0))}
+                  className="h-11 w-24 text-center"
+                  aria-label={`وزن ${item.name}`}
+                />
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => updateQuantity(item.barcode, item.quantity - 1)}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white text-lg font-bold text-gray-700 shadow-sm hover:bg-gray-100"
+                    aria-label="إنقاص الكمية"
+                  >
+                    −
+                  </button>
+                  <span className="w-10 text-center text-base font-semibold">{item.quantity}</span>
+                  <button
+                    type="button"
+                    onClick={() => updateQuantity(item.barcode, item.quantity + 1)}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white text-lg font-bold text-gray-700 shadow-sm hover:bg-gray-100"
+                    aria-label="زيادة الكمية"
+                  >
+                    +
+                  </button>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <span className="font-semibold text-gray-900">

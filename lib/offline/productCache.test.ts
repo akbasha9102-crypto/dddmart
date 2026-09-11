@@ -12,6 +12,7 @@ const BASE_PRODUCT: ProductWithCategory = {
   quantity: 50,
   min_stock_threshold: 5,
   unit: "قطعة",
+  sold_by_weight: false,
   is_active: true,
   store_id: "store-1",
   created_at: "",

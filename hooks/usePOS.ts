@@ -14,7 +14,7 @@ import type { ProductUnit } from "@/types/product";
 import type { PaymentMethod } from "@/types/database.types";
 import type { Shift } from "@/types/shifts";
 import { toBaseUnits } from "@/lib/units";
-import { generateInvoiceNumber } from "@/lib/utils";
+import { generateInvoiceNumber, roundMoney } from "@/lib/utils";
 import { addPendingHeldSale, addPendingSale, getPendingHeldSales, removePendingHeldSale } from "@/lib/offline/outbox";
 import { getCachedCatalog, getCachedUnitsList, resolveBarcodeOffline } from "@/lib/offline/productCache";
 
@@ -212,7 +212,7 @@ export function usePOS({ cashierId, storeId, shift, isOnline }: UsePOSOptions) {
               barcode: item.barcode,
               quantity: item.quantity,
               unit_price: item.unitPrice,
-              total_price: item.unitPrice * item.quantity,
+              total_price: roundMoney(item.unitPrice * item.quantity),
               unit_label: item.unitName ?? null,
               unit_conversion_factor: item.unitConversionFactor ?? 1,
               cost_price: item.costPrice,
